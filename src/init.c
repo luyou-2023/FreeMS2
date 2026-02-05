@@ -63,17 +63,17 @@
  * @author Fred Cooke
  */
 void init(){
-	ATOMIC_START();         	/* Disable ALL interrupts while we configure the board ready for use */
-	initPLL();              	/* Set up the PLL and use it */
-	initIO();               	/* TODO make this config dependent. Set up all the pins and modules to be in low power harmless states */
-	initAllPagedRAM();      	/* Copy table and config blocks of data from flash to the paged RAM blocks for fast data lookup */
-	initVariables();        	/* Initialise the rest of the running variables etc */
-	initFlash();            	/* TODO, finalise this */
-	initECTTimer();         	/* TODO move this to inside config in an organised way. Set up the timer module and its various aspects */
-	initSCIStuff();         	/* Setup the sci module(s) that we will use. */
-	initConfiguration();    	/* TODO Set user/feature/config up here! */
-	initInterrupts();       	/* still last, reset timers, enable interrupts here TODO move this to inside config in an organised way. Set up the rest of the individual interrupts */
-	ATOMIC_END();           	/* Re-enable any configured interrupts */
+	ATOMIC_START();         	/* 禁用所有中断，同时我们将板子配置为可用状态 */
+	initPLL();              	/* 设置 PLL 并使用它 */
+	initIO();               	/* TODO 使这依赖于配置。设置所有引脚和模块为低功耗无害状态 */
+	initAllPagedRAM();      	/* 将表格和配置数据块从 flash 复制到分页 RAM 块以进行快速数据查找 */
+	initVariables();        	/* 初始化其余的运行变量等 */
+	initFlash();            	/* TODO，完成这个 */
+	initECTTimer();         	/* TODO 以有组织的方式将其移到配置内部。设置定时器模块及其各个方面 */
+	initSCIStuff();         	/* 设置我们将使用的 sci 模块。 */
+	initConfiguration();    	/* TODO 在这里设置用户/功能/配置！ */
+	initInterrupts();       	/* 仍然是最后一步，在这里重置定时器，启用中断 TODO 以有组织的方式将其移到配置内部。设置其余各个中断 */
+	ATOMIC_END();           	/* 重新启用任何已配置的中断 */
 }
 
 
@@ -89,23 +89,30 @@ void init(){
  * @author Fred Cooke
  */
 void initPLL(){
-	CLKSEL &= PLLSELOFF;	/* Switches to base external OSCCLK to ensure PLL is not being used (off out of reset, but not sure if the monitor turns it on before passing control or not) */
-	PLLCTL &= PLLOFF;		/* Turn the PLL device off to adjust its speed (on by default out of reset) */
-	REFDV = PLLDIVISOR;		/* 16MHz / (3 + 1) = 4MHz Bus frequency */
-	SYNR = PLLMULTIPLIER;	/* 4MHz * (9 + 1) = 40MHz Bus frequency */
-	PLLCTL |= PLLON;		/* Turn the PLL device back on again at 80MHz */
+	// 切换到基础外部 OSCCLK 以确保不使用 PLL（复位后关闭，但不确定监控程序是否在传递控制之前将其打开）
+	CLKSEL &= PLLSELOFF;
+	// 关闭 PLL 设备以调整其速度（复位后默认打开）
+	PLLCTL &= PLLOFF;
+	// 设置参考分频器：16MHz / (3 + 1) = 4MHz 总线频率
+	REFDV = PLLDIVISOR;
+	// 设置 PLL 倍频器：4MHz * (9 + 1) = 40MHz 总线频率
+	SYNR = PLLMULTIPLIER;
+	// 重新打开 PLL 设备，现在运行在 80MHz
+	PLLCTL |= PLLON;
 
+	// 等待 PLL 锁定到目标频率
 	while (!(CRGFLG & PLLLOCK)){
-		/* Do nothing while we wait till the PLL loop locks onto the target frequency. */
-		/* Target frequency is given by (2 * (crystal frequency / (REFDV + 1)) * (SYNR + 1)) */
-		/* Bus frequency is half PLL frequency and given by ((crystal frequency / (REFDV + 1)) * (SYNR + 1)) */
+		/* 在 PLL 环路锁定到目标频率之前什么都不做 */
+		/* 目标频率由 (2 * (晶振频率 / (REFDV + 1)) * (SYNR + 1)) 给出 */
+		/* 总线频率是 PLL 频率的一半，由 ((晶振频率 / (REFDV + 1)) * (SYNR + 1)) 给出 */
 	}
 
-	CLKSEL = PLLSELON;		/* Switches to PLL clock for internal bus frequency	*/
-	/* from MC9S12XDP512V2.pdf Section 2.4.1.1.2 page 101 Third paragraph		*/
-	/* "This takes a MAXIMUM of 4 OSCCLK clock cylces PLUS 4 PLL clock cycles"	*/
-	/* "During this time ALL clocks freeze, and CPU activity ceases"			*/
-	/* Therefore there is no point waiting for this to occur, we already are...	*/
+	// 切换到 PLL 时钟用于内部总线频率
+	CLKSEL = PLLSELON;
+	/* 来自 MC9S12XDP512V2.pdf 第 2.4.1.1.2 节第 101 页第三段 */
+	/* "这最多需要 4 个 OSCCLK 时钟周期加上 4 个 PLL 时钟周期" */
+	/* "在此期间所有时钟冻结，CPU 活动停止" */
+	/* 因此没有必要等待这发生，我们已经... */
 }
 
 
@@ -126,37 +133,55 @@ void initIO(){
 	//ATD1DIEN0 = ZEROS; /* You are out of your mind if you waste this on digital Inputs (NOT-bonded, can't use) */
 	//ATD1DIEN1 = ZEROS; /* You are out of your mind if you waste this on digital Inputs */
 
-	/* And configure them all for analog input */
-	//ATD0CTL0 = 0x07/* With mult turned on this is required to be set to cause wrap around, but is correct out of reset */
-	//ATD0CTL1 = 0x07/* Trigger and interrupt configuration, unused for now. */
-	ATD0CTL2 = 0xC0; /* Turns on the ADC block and sets auto flag clear */
-	ATD0CTL3 = 0x40; /* Set sequence length = 8 */
-	ATD0CTL4 = 0x73; /* Set the ADC clock and sample period for best accuracy */
-	ATD0CTL5 = 0xB0; /* Sets justification to right, multiplex and scan all channels. Writing to this causes conversions to begin */
+	/* 并将它们全部配置为模拟输入 */
+	//ATD0CTL0 = 0x07/* 打开 mult 时需要设置此值以导致回绕，但复位后是正确的 */
+	//ATD0CTL1 = 0x07/* 触发和中断配置，目前未使用 */
+	// ATD0CTL2: 0xC0 = 0b11000000
+	// - BIT7 (ADPU): 1 = 打开 ADC 模块
+	// - BIT6 (AFFC): 1 = 自动标志清除
+	ATD0CTL2 = 0xC0;
+	// ATD0CTL3: 0x40 = 0b01000000
+	// - BIT6 (S8C): 1 = 序列长度 = 8 个通道
+	ATD0CTL3 = 0x40;
+	// ATD0CTL4: 0x73 = 0b01110011
+	// - BIT7-5: 预分频器设置 ADC 时钟
+	// - BIT4-0: 采样时间设置
+	ATD0CTL4 = 0x73;
+	// ATD0CTL5: 0xB0 = 0b10110000
+	// - BIT7 (DJM): 1 = 右对齐
+	// - BIT6 (SCAN): 1 = 扫描所有通道
+	// - BIT5-0: 多路复用器选择（写入此寄存器会开始转换）
+	ATD0CTL5 = 0xB0;
 
-	/* And configure them all for analog input */
-	ATD0CTL4 = 0x73; /* Set the ADC clock and sample period for best accuracy */
-	ATD0CTL5 = 0xB0; /* Sets justification to right, multiplex and scan all channels. Writing to this causes conversions to begin */
+	/* 再次配置它们全部为模拟输入（重复配置以确保正确） */
+	ATD0CTL4 = 0x73; /* 设置 ADC 时钟和采样周期以获得最佳精度 */
+	ATD0CTL5 = 0xB0; /* 设置右对齐，多路复用并扫描所有通道。写入此值会开始转换 */
 
 #ifndef NO_INIT
-	/* Set up the PWM component and initialise its values to off */
-	PWME = 0x7F; /* Turn on PWM 0 - 6 (7 is user LED on main board) */
-	PWMCLK = ZEROS; /* The fastest we can go for all channels */
-	PWMPRCLK = ZEROS; /* The fastest prescaler we can go for all channels */
-	PWMSCLA = ZEROS; /* The fastest we can go */
-	PWMSCLB = ZEROS; /* The fastest we can go */
-	/* TODO PWM channel concatenation for high resolution */
-	// join channel pairs together here (needs 16 bit regs enabled too)
-	/* TODO Initialise pwm channels with frequency, and initial duty for real use */
-	// initial PWM settings for testing
-	/* PWM periods */
-	PWMPER0 = 0xFF; // 255 for ADC0 testing
-	PWMPER1 = 0xFF; // 255 for ADC1 testing
-	PWMPER2 = 0xFF; // 255 for ADC1 testing
-	PWMPER3 = 0xFF; // 255 for ADC1 testing
-	PWMPER4 = 0xFF; // 255 for ADC1 testing
-	PWMPER5 = 0xFF; // 255 for ADC1 testing
-	/* PWM duties */
+	/* 设置 PWM 组件并将其值初始化为关闭 */
+	// PWME: 0x7F = 0b01111111，启用 PWM 通道 0-6（通道 7 是主板上的用户 LED）
+	PWME = 0x7F;
+	// PWMCLK: 选择最快的时钟源用于所有通道
+	PWMCLK = ZEROS;
+	// PWMPRCLK: 选择最快的预分频器用于所有通道
+	PWMPRCLK = ZEROS;
+	// PWMSCLA: 通道 A 缩放器设置为最快
+	PWMSCLA = ZEROS;
+	// PWMSCLB: 通道 B 缩放器设置为最快
+	PWMSCLB = ZEROS;
+	/* TODO PWM 通道级联以获得高分辨率 */
+	// 在这里将通道对连接在一起（还需要启用 16 位寄存器）
+	/* TODO 使用频率和初始占空比初始化 pwm 通道以供实际使用 */
+	// 用于测试的初始 PWM 设置
+	/* PWM 周期 */
+	PWMPER0 = 0xFF; // 255 用于 ADC0 测试
+	PWMPER1 = 0xFF; // 255 用于 ADC1 测试
+	PWMPER2 = 0xFF; // 255 用于 ADC1 测试
+	PWMPER3 = 0xFF; // 255 用于 ADC1 测试
+	PWMPER4 = 0xFF; // 255 用于 ADC1 测试
+	PWMPER5 = 0xFF; // 255 用于 ADC1 测试
+	/* PWM 占空比 */
+	// 将所有通道的占空比设置为 0（关闭输出）
 	PWMDTY0 = 0;
 	PWMDTY1 = 0;
 	PWMDTY2 = 0;
@@ -165,27 +190,34 @@ void initIO(){
 	PWMDTY5 = 0;
 
 
-	/* Initialise the state of pins configured as output */
-	/* Initialise to low such that transistor grounded things are all turned off by default. */
-	PORTA = ZEROS; /* The serial monitor pin is on 0x40, and could cause problems if capacitance at the output is large when a reset occurs. */
-	PORTB = ZEROS; /* Init the rest of the spark outputs as off */
-	PORTE = 0x1F; /* 0b_0001_1111 : when not in use 0b_1001_1111 PE7 should be high PE5 and PE6 should be low, the rest high */
-	PORTK = ZEROS;
-	/* AD0PT1 You are out of your mind if you waste this on digital Inputs */
-	/* AD1PT1 You are out of your mind if you waste this on digital Inputs */
+	/* 初始化配置为输出的引脚状态 */
+	/* 初始化为低电平，这样默认情况下所有接地的晶体管都被关闭 */
+	PORTA = ZEROS; /* 串口监控引脚在 0x40，如果复位时输出电容很大可能会导致问题 */
+	PORTB = ZEROS; /* 初始化其余火花输出为关闭 */
+	// PORTE: 0x1F = 0b00011111
+	// 当不使用时应该是 0b10011111，PE7 应该为高，PE5 和 PE6 应该为低，其余为高
+	PORTE = 0x1F;
+	PORTK = ZEROS; /* 初始化 PORTK 为低 */
+	/* AD0PT1 如果你将这些浪费在数字输入上，你就疯了 */
+	/* AD1PT1 如果你将这些浪费在数字输入上，你就疯了 */
 
-	/* Initialise the Data Direction Registers */
-	/* To outputs based on the note at the end of chapter 1.2.2 of MC9S12XDP512V2.pdf */
-	DDRA = ONES; /* GPIO (8) */
-	DDRB = ONES; /* GPIO (8) */
-	DDRE = 0xFC; /* 0b_1111_1100 : Clock and mode pins PE0,PE1 are input only pins, the rest are GPIO */
-	DDRK = ONES; /* Only 0,1,2,3,4,5,7, NOT 6 (7) */
-	DDRS = ONES; /* SCI0, SCI1, SPI0 (8) */
-	DDRT = 0xFC; /* 0b_1111_1100 set ECT pins 0,1 to IC and 2:7 to OC (8) */
-	DDRM = ONES; /* CAN 0 - 3 (8) */
-	DDRP = ONES; /* PWM pins (8) */
-	DDRJ = ONES; /* Only 0,1,6,7 are brought out on the 112 pin chip (4) */
-	/* AD0DDR1 You are out of your mind if you waste this on digital Inputs */
+	/* 初始化数据方向寄存器 */
+	/* 根据 MC9S12XDP512V2.pdf 第 1.2.2 章末尾的注释设置为输出 */
+	DDRA = ONES; /* GPIO (8 位) - 所有位设置为输出 */
+	DDRB = ONES; /* GPIO (8 位) - 所有位设置为输出 */
+	// DDRE: 0xFC = 0b11111100
+	// PE0 和 PE1 是时钟和模式引脚，只能输入，其余是 GPIO 输出
+	DDRE = 0xFC;
+	// DDRK: 只有 0,1,2,3,4,5,7 位可用，不是 6（共 7 位）
+	DDRK = ONES;
+	DDRS = ONES; /* SCI0, SCI1, SPI0 (8 位) - 所有位设置为输出 */
+	// DDRT: 0xFC = 0b11111100
+	// ECT 引脚 0,1 设置为输入捕获 (IC)，2:7 设置为输出比较 (OC)
+	DDRT = 0xFC;
+	DDRM = ONES; /* CAN 0 - 3 (8 位) - 所有位设置为输出 */
+	DDRP = ONES; /* PWM 引脚 (8 位) - 所有位设置为输出 */
+	DDRJ = ONES; /* 在 112 引脚芯片上只有 0,1,6,7 引出 (4 位) */
+	/* AD0DDR1 如果你将这些浪费在数字输入上，你就疯了 */
 #endif
 }
 
@@ -199,10 +231,12 @@ void initIO(){
  * @author Fred Cooke
  */
 void initLookupAddresses(){
-	IATTransferTableLocation = (void*)&IATTransferTable;
-	CHTTransferTableLocation = (void*)&CHTTransferTable;
-	MAFTransferTableLocation = (void*)&MAFTransferTable;
-	TestTransferTableLocation = (void*)&TestTransferTable;
+	// 保存查找表的地址指针，这些表位于分页 flash 中
+	// 这样做是为了避免在访问分页数据时出现警告
+	IATTransferTableLocation = (void*)&IATTransferTable;    // 进气温度转换表地址
+	CHTTransferTableLocation = (void*)&CHTTransferTable;    // 缸盖温度转换表地址
+	MAFTransferTableLocation = (void*)&MAFTransferTable;    // 质量空气流量转换表地址
+	TestTransferTableLocation = (void*)&TestTransferTable;  // 测试转换表地址
 }
 
 
@@ -215,15 +249,16 @@ void initLookupAddresses(){
  * @author Fred Cooke
  */
 void initFuelAddresses(){
-	/* Setup addresses within the page to avoid warnings */
-	VETableMainFlashLocation		= (void*)&VETableMainFlash;
-	VETableSecondaryFlashLocation	= (void*)&VETableSecondaryFlash;
-	VETableTertiaryFlashLocation	= (void*)&VETableTertiaryFlash;
-	LambdaTableFlashLocation		= (void*)&LambdaTableFlash;
-	VETableMainFlash2Location		= (void*)&VETableMainFlash2;
-	VETableSecondaryFlash2Location	= (void*)&VETableSecondaryFlash2;
-	VETableTertiaryFlash2Location	= (void*)&VETableTertiaryFlash2;
-	LambdaTableFlash2Location		= (void*)&LambdaTableFlash2;
+	/* 在页面内设置地址以避免警告 */
+	// 保存燃油表格的 Flash 地址指针，这些表格位于分页 flash 中
+	VETableMainFlashLocation		= (void*)&VETableMainFlash;          // 主 VE 表 Flash 地址
+	VETableSecondaryFlashLocation	= (void*)&VETableSecondaryFlash;      // 辅助 VE 表 Flash 地址
+	VETableTertiaryFlashLocation	= (void*)&VETableTertiaryFlash;       // 第三 VE 表 Flash 地址
+	LambdaTableFlashLocation		= (void*)&LambdaTableFlash;           // Lambda 表 Flash 地址
+	VETableMainFlash2Location		= (void*)&VETableMainFlash2;         // 主 VE 表 Flash2 地址
+	VETableSecondaryFlash2Location	= (void*)&VETableSecondaryFlash2;     // 辅助 VE 表 Flash2 地址
+	VETableTertiaryFlash2Location	= (void*)&VETableTertiaryFlash2;      // 第三 VE 表 Flash2 地址
+	LambdaTableFlash2Location		= (void*)&LambdaTableFlash2;          // Lambda 表 Flash2 地址
 }
 
 
@@ -483,88 +518,119 @@ void initVariables(){
  *          damage your flash module or get corrupt data written to it.
  */
 void initFlash(){
-	FCLKDIV = 0x28;                  	/* Set the flash clock frequency	*/
-	FPROT = 0xFF;                    	/* Disable all flash protection 	*/
-	FSTAT = FSTAT | (PVIOL | ACCERR);	/* Clear any errors             	*/
+	// FCLKDIV: 0x28 = 40 (十进制)
+	// Flash 时钟频率 = 总线频率 / (PRDIV8 ? 8 : 1) / (FCLKDIV + 1)
+	// 对于 40MHz 总线：40MHz / 40 = 1MHz（在 150-200kHz 范围内，需要调整）
+	FCLKDIV = 0x28;
+	// FPROT: 0xFF = 禁用所有 flash 保护
+	// 允许从代码中写入 flash
+	FPROT = 0xFF;
+	// FSTAT: 清除任何错误标志
+	// PVIOL = 保护违反错误
+	// ACCERR = 访问错误
+	FSTAT = FSTAT | (PVIOL | ACCERR);
 }
 
 /* Set up the timer module and its various interrupts */
 void initECTTimer(){
 
-	// TODO rearrange the order of this stuff and pull enable and interrupt enable out to the last function call of init.
+	// TODO 重新安排这些东西的顺序，并将使能和中断使能提取到 init 的最后一个函数调用中
 
 
 #ifndef NO_INIT
-	/* Timer channel interrupts */
-	TIE = 0x21;//0x03; /* 0,5 IC interrupts enabled for reading engine position and RPM, 6 OC channels disabled such that no injector switching happens till scheduled */
-	TFLG = ONES; /* Clear all the flags such that we are up and running before they first occur */
-	TFLGOF = ONES; /* Clear all the flags such that we are up and running before they first occur */
+	/* 定时器通道中断 */
+	// TIE: 0x21 = 0b00100001
+	// BIT0: 通道 0 输入捕获中断使能（主 RPM 输入）
+	// BIT5: 通道 5 输入捕获中断使能（次 RPM 输入）
+	// 通道 1-4,6-7 的输出比较中断禁用，这样在调度之前不会发生喷油器切换
+	TIE = 0x21;//0x03;
+	// TFLG: 清除所有标志，这样在它们首次发生之前我们就已经运行了
+	TFLG = ONES;
+	// TFLGOF: 清除所有溢出标志
+	TFLGOF = ONES;
 
-	/* TODO Turn the timer on and set the rate and overflow interrupt */
-	TSCR1 = 0x80; /* 0b_1000_0000 Timer enabled */
-	TSCR2 = 0x84; /* 0b_1000_0100 Overflow interrupt enable, divide by 16 */
+	/* TODO 打开定时器并设置速率和溢出中断 */
+	// TSCR1: 0x80 = 0b10000000
+	// BIT7 (TEN): 1 = 定时器使能
+	TSCR1 = 0x80;
+	// TSCR2: 0x84 = 0b10000100
+	// BIT7 (TOI): 1 = 溢出中断使能
+	// BIT2-0: 预分频器 = 4 (除以 16)
+	// 定时器频率 = 40MHz / 16 = 2.5MHz，每个计数 = 0.4μs
+	TSCR2 = 0x84;
 	/* http://www.google.com/search?hl=en&safe=off&q=1+%2F+%2840MHz+%2F+32+%29&btnG=Search */
 	/* http://www.google.com/search?hl=en&safe=off&q=1+%2F+%2840MHz+%2F+32+%29+*+2%5E16&btnG=Search */
 	/* www.mecheng.adelaide.edu.au/robotics_novell/WWW_Devs/Dragon12/LM4_Timer.pdf */
 
-	/* Initial actions */
-	/* ms2extra pin config
-	0 = RPM/Position input primary
-	1 = Injector 1
-	2 = Injector 3
-	3 = Injector 2
-	4 = Injector 4
-	5 = RPM/Position input secondary
+	/* 初始操作 */
+	/* ms2extra 引脚配置
+	0 = RPM/位置输入主输入
+	1 = 喷油器 1
+	2 = 喷油器 3
+	3 = 喷油器 2
+	4 = 喷油器 4
+	5 = RPM/位置输入次输入
 	6 = IAC1
 	7 = IAC2
 	*/
-	TIOS = 0xDE; /* 0b_1101_1110 - 0 and 5 are input capture, 1 through 4 and 6 and 7 are output compare */
-	TCTL1 = ZEROS; /* Set disabled at startup time, use these and other flags to switch fueling on and off inside the decoder */
-	TCTL2 = ZEROS; /* 0,1 have compare turned off regardless as they are in IC mode. */
-	TCTL3 = 0x0C; /* Capture on both edges of IC 5 (secondary in), capture off for 4,6,7 */
-	TCTL4 = 0x03; /* Capture on both edges of IC 0 (primary in), capture off for 1,2,3 */
+	// TIOS: 0xDE = 0b11011110
+	// 通道 0 和 5 是输入捕获，通道 1-4 和 6-7 是输出比较
+	TIOS = 0xDE;
+	// TCTL1: 在启动时设置为禁用，使用这些和其他标志在解码器内部开关燃油
+	TCTL1 = ZEROS;
+	// TCTL2: 0,1 的比较关闭，因为它们处于 IC 模式
+	TCTL2 = ZEROS;
+	// TCTL3: 0x0C = 0b00001100
+	// IC5（次输入）在双边沿捕获，4,6,7 的捕获关闭
+	TCTL3 = 0x0C;
+	// TCTL4: 0x03 = 0b00000011
+	// IC0（主输入）在双边沿捕获，1,2,3 的捕获关闭
+	TCTL4 = 0x03;
 #endif
 }
 
 
 /* Setup the sci module(s) that we need to use. */
 void initSCIStuff(){
-	/* The alternative register set selector defaults to zero */
+	/* 替代寄存器集选择器默认为零 */
 
-	// set the baud/data speed
+	// 设置波特率/数据速度
+	// SCI0BD: 波特率分频器，从配置中读取
 	SCI0BD = fixedConfigs1.serialSettings.baudDivisor;
 
-	// etc
+	// 等等
 
-	/* Switch to alternative register set? */
+	/* 切换到替代寄存器集？ */
 
-	// etc
+	// 等等
 
-	/* Switch back again? */
+	/* 再次切换回来？ */
 
 	/*
-	 * 0 = LOOPS (normal two wire operation)
-	 * 0 = SCISWAI (Wait mode on)
-	 * 0 = RSRC (if loops=1, int/ext wiring)
-	 * 1 = M MODE (9 bit operation)
-	 * 0 = WAKE (idle line wakeup)
-	 * 0 = ILT (idle line type count start pos)
-	 * 1 = PE (parity on)
-	 * 1 = PT (odd parity) (minicom defaults to no parity)
+	 * SCI0CR1: 0x13 = 0b00010011
+	 * BIT7 = 0: LOOPS (正常双线操作)
+	 * BIT6 = 0: SCISWAI (等待模式开启)
+	 * BIT5 = 0: RSRC (如果 loops=1，内部/外部接线)
+	 * BIT4 = 1: M MODE (9 位操作)
+	 * BIT3 = 0: WAKE (空闲线唤醒)
+	 * BIT2 = 0: ILT (空闲线类型计数起始位置)
+	 * BIT1 = 1: PE (奇偶校验开启)
+	 * BIT0 = 1: PT (奇校验) (minicom 默认无奇偶校验)
 	 *
 	 * 00010011 = 0x13
 	 */
 	SCI0CR1 = 0x13;
 
 	/*
-	 * 0 = TIE (tx data empty isr disabled)
-	 * 0 = TCIE (tx complete isr disabled)
-	 * 1 = RIE (rx full isr enabled)
-	 * 0 = ILIE (idle line isr disabled)
-	 * 1 = TE (transmit enabled)
-	 * 1 = RE (receive enabled)
-	 * 0 = RWU (rx wake up normal)
-	 * 0 = SBK (send break off)
+	 * SCI0CR2: 0x2C = 0b00101100
+	 * BIT7 = 0: TIE (发送数据空中断禁用)
+	 * BIT6 = 0: TCIE (发送完成中断禁用)
+	 * BIT5 = 1: RIE (接收满中断使能)
+	 * BIT4 = 0: ILIE (空闲线中断禁用)
+	 * BIT3 = 1: TE (发送使能)
+	 * BIT2 = 1: RE (接收使能)
+	 * BIT1 = 0: RWU (接收唤醒正常)
+	 * BIT0 = 0: SBK (发送中断关闭)
 	 *
 	 * 00101100 = 0x2C
 	 */
@@ -624,10 +690,16 @@ void initConfiguration(){
 
 /* Set up all the remaining interrupts */
 void initInterrupts(){
-	/* Set up the Real Time Interrupt */
-	RTICTL = 0x10; /* 0b_0001_0000 0.128ms/128us period http://www.google.com/search?hl=en&safe=off&q=1+%2F+%288MHz+%2F+%282^10%29+%29&aq=f&aqi=h1&aql=&oq= */
-	CRGINT |= 0x80; /* Enable the RTI */
-	CRGFLG = 0x80; /* Clear the RTI flag */
+	/* 设置实时中断 */
+	// RTICTL: 0x10 = 0b00010000
+	// BIT7-4: 预分频器选择 = 1 (除以 2^1 = 2)
+	// BIT3-0: 模数计数器 = 0 (除以 2^0 = 1)
+	// RTI 周期 = 1 / (8MHz / 2^1 / 2^0) = 1 / 4MHz = 0.25μs * 512 = 128μs
+	RTICTL = 0x10;
+	// CRGINT: 启用 RTI 中断
+	CRGINT |= 0x80;
+	// CRGFLG: 清除 RTI 标志
+	CRGFLG = 0x80;
 
 	// TODO set up irq and xirq for testing
 	// IRQCR for IRQ

@@ -59,128 +59,140 @@
  * @author Fred Cooke
  */
 int  main(){ // TODO maybe move this to paged flash ?
-	// Set everything up.
+	// 设置所有系统组件
 	init();
 
 	//LongNoTime.timeLong = 54;
-	// Run forever repeating.
+	// 进入主循环，无限循环运行直到设备关闭或复位
 	while(TRUE){
 	//	unsigned short start = realTimeClockMillis;
-		/* If ADCs require forced sampling, sample now */
+		/* 如果 ADC 需要强制采样，现在进行采样 */
 		if(coreStatusA & FORCE_READING){
-			ATOMIC_START(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
-			/* Atomic block to ensure a full set of readings are taken together */
+			ATOMIC_START(); /* 开始原子操作块，禁用中断以确保数据一致性 */
+			/* 原子操作块确保完整的一组读数被一起获取 */
 
-			/* Check to ensure that a reading wasn't take before we entered a non interruptable state */
-			if(coreStatusA & FORCE_READING){ // do we still need to do this TODO ?
+			/* 检查确保在我们进入不可中断状态之前没有进行过读取 */
+			if(coreStatusA & FORCE_READING){ // 我们是否仍然需要这样做 TODO ?
 
-				sampleEachADC(ADCArraysRecord); // TODO still need to do a pair of loops and clock these two functions for performance.
+				// 采样所有 ADC 通道，将结果存储到记录缓冲区
+				sampleEachADC(ADCArraysRecord); // TODO 仍然需要做一对循环并为这两个函数计时以获得性能数据
 				//sampleLoopADC(&ADCArrays);
+				// 重置到非运行状态（清除运行标志等）
 				resetToNonRunningState();
+				// 增加超时 ADC 读取计数器
 				Counters.timeoutADCreadings++;
 
-				/* Set flag to say calc required */
+				/* 设置标志以指示需要计算 */
 				coreStatusA |= CALC_FUEL_IGN;
 
-				/* Clear force reading flag */
+				/* 清除强制读取标志 */
 				coreStatusA &= CLEAR_FORCE_READING;
 			}
 
-			ATOMIC_END(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
+			ATOMIC_END(); /* 结束原子操作块，重新启用中断 */
 		}
 
-		/* If required, do main fuel and ignition calcs first */
+		/* 如果需要，首先执行主要的燃油和点火计算 */
 		if(coreStatusA & CALC_FUEL_IGN){
-			ATOMIC_START(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
-			/* Atomic block to ensure that we don't clear the flag for the next data set when things are tight */
+			ATOMIC_START(); /* 开始原子操作块 */
+			/* 原子操作块确保在时间紧张时不会为下一个数据集清除标志 */
 
-			/* Switch input bank so that we have a stable set of the latest data */
+			/* 切换输入缓冲区，以便我们有一组稳定的最新数据 */
 			if(ADCArrays == &ADCArrays1){
-				RPM = &RPM0; // TODO temp, remove
-				RPMRecord = &RPM1; // TODO temp, remove
-				ADCArrays = &ADCArrays0;
-				ADCArraysRecord = &ADCArrays1;
-				mathSampleTimeStamp = &ISRLatencyVars.mathSampleTimeStamp0; // TODO temp, remove
-				mathSampleTimeStampRecord = &ISRLatencyVars.mathSampleTimeStamp1; // TODO temp, remove
+				// 如果当前使用的是缓冲区1，切换到缓冲区0
+				RPM = &RPM0; // TODO 临时变量，待移除
+				RPMRecord = &RPM1; // TODO 临时变量，待移除
+				ADCArrays = &ADCArrays0;          // 切换到缓冲区0用于计算
+				ADCArraysRecord = &ADCArrays1;    // 缓冲区1用于ISR记录新数据
+				mathSampleTimeStamp = &ISRLatencyVars.mathSampleTimeStamp0; // TODO 临时变量，待移除
+				mathSampleTimeStampRecord = &ISRLatencyVars.mathSampleTimeStamp1; // TODO 临时变量，待移除
 			}else{
-				RPM = &RPM1; // TODO temp, remove
-				RPMRecord = &RPM0; // TODO temp, remove
-				ADCArrays = &ADCArrays1;
-				ADCArraysRecord = &ADCArrays0;
-				mathSampleTimeStamp = &ISRLatencyVars.mathSampleTimeStamp1; // TODO temp, remove
-				mathSampleTimeStampRecord = &ISRLatencyVars.mathSampleTimeStamp0; // TODO temp, remove
+				// 如果当前使用的是缓冲区0，切换到缓冲区1
+				RPM = &RPM1; // TODO 临时变量，待移除
+				RPMRecord = &RPM0; // TODO 临时变量，待移除
+				ADCArrays = &ADCArrays1;          // 切换到缓冲区1用于计算
+				ADCArraysRecord = &ADCArrays0;    // 缓冲区0用于ISR记录新数据
+				mathSampleTimeStamp = &ISRLatencyVars.mathSampleTimeStamp1; // TODO 临时变量，待移除
+				mathSampleTimeStampRecord = &ISRLatencyVars.mathSampleTimeStamp0; // TODO 临时变量，待移除
 			}
 
-			/* Clear the calc required flag */
+			/* 清除计算所需标志 */
 			coreStatusA &= CLEAR_CALC_FUEL_IGN;
 
-			ATOMIC_END(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
+			ATOMIC_END(); /* 结束原子操作块 */
 
-			/* Store the latency from sample time to runtime */
+			/* 存储从采样时间到运行时的延迟 */
 			ISRLatencyVars.mathLatency = TCNT - *mathSampleTimeStamp;
-			/* Keep track of how many calcs we are managing per second... */
+			/* 跟踪我们每秒执行多少次计算... */
 			Counters.calculationsPerformed++;
-			/* ...and how long they take each */
-			unsigned short mathStartTime = TCNT;
+			/* ...以及每次计算花费多长时间 */
+			unsigned short mathStartTime = TCNT;  // 记录计算开始时间
 
-			/* Generate the core variables from sensor input and recorded tooth timings */
+			/* 从传感器输入和记录的齿时序生成核心变量 */
 			generateCoreVars();
 
+			// 记录核心变量生成的运行时间（以定时器计数为单位）
 			RuntimeVars.genCoreVarsRuntime = TCNT - mathStartTime;
-			unsigned short derivedStartTime = TCNT;
+			unsigned short derivedStartTime = TCNT;  // 记录派生变量生成开始时间
 
-			/* Generate the derived variables from the core variables based on settings */
-			//generateDerivedVars();
+			/* 根据设置从核心变量生成派生变量 */
+			//generateDerivedVars();  // 当前被注释掉
 
+			// 记录派生变量生成的运行时间
 			RuntimeVars.genDerivedVarsRuntime = TCNT - derivedStartTime;
-			unsigned short calcsStartTime = TCNT;
+			unsigned short calcsStartTime = TCNT;  // 记录计算开始时间
 
-			/* Perform the calculations TODO possibly move this to the software interrupt if it makes sense to do so */
-			//calculateFuelAndIgnition();
+			/* 执行计算 TODO 如果合理的话，可能将此移到软件中断中 */
+			//calculateFuelAndIgnition();  // 当前被注释掉
 
+			// 记录计算的运行时间
 			RuntimeVars.calcsRuntime = TCNT - calcsStartTime;
-			/* Record the runtime of all the math total */
+			/* 记录所有数学计算的总运行时间 */
 			RuntimeVars.mathTotalRuntime = TCNT - mathStartTime;
 
+			// 计算数学计算的总和运行时间（各阶段时间之和）
 			RuntimeVars.mathSumRuntime = RuntimeVars.calcsRuntime + RuntimeVars.genCoreVarsRuntime + RuntimeVars.genDerivedVarsRuntime;
 
-			ATOMIC_START(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
-			/* Atomic block to ensure that outputBank and outputBank Offsets match */
+			ATOMIC_START(); /* 开始原子操作块 */
+			/* 原子操作块确保输出缓冲区和输出缓冲区偏移量匹配 */
 
-			/* Switch banks to the latest data */
+			/* 切换到最新数据的缓冲区 */
 			if(injectorMainPulseWidthsMath == injectorMainPulseWidths1){
-				currentDwellMath = &currentDwell0;
-				currentDwellRealtime = &currentDwell1;
-				injectorMainPulseWidthsMath = injectorMainPulseWidths0;
-				injectorMainPulseWidthsRealtime = injectorMainPulseWidths1;
-				injectorStagedPulseWidthsMath = injectorStagedPulseWidths0;
-				injectorStagedPulseWidthsRealtime = injectorStagedPulseWidths1;
+				// 如果数学计算使用的是缓冲区1，切换到缓冲区0
+				currentDwellMath = &currentDwell0;                    // 数学计算使用闭合角缓冲区0
+				currentDwellRealtime = &currentDwell1;                 // 实时ISR使用闭合角缓冲区1
+				injectorMainPulseWidthsMath = injectorMainPulseWidths0;      // 数学计算使用主喷油脉宽缓冲区0
+				injectorMainPulseWidthsRealtime = injectorMainPulseWidths1;  // 实时ISR使用主喷油脉宽缓冲区1
+				injectorStagedPulseWidthsMath = injectorStagedPulseWidths0;   // 数学计算使用分级喷油脉宽缓冲区0
+				injectorStagedPulseWidthsRealtime = injectorStagedPulseWidths1; // 实时ISR使用分级喷油脉宽缓冲区1
 			}else{
-				currentDwellMath = &currentDwell1;
-				currentDwellRealtime = &currentDwell0;
-				injectorMainPulseWidthsMath = injectorMainPulseWidths1;
-				injectorMainPulseWidthsRealtime = injectorMainPulseWidths0;
-				injectorStagedPulseWidthsMath = injectorStagedPulseWidths1;
-				injectorStagedPulseWidthsRealtime = injectorStagedPulseWidths0;
+				// 如果数学计算使用的是缓冲区0，切换到缓冲区1
+				currentDwellMath = &currentDwell1;                    // 数学计算使用闭合角缓冲区1
+				currentDwellRealtime = &currentDwell0;                 // 实时ISR使用闭合角缓冲区0
+				injectorMainPulseWidthsMath = injectorMainPulseWidths1;      // 数学计算使用主喷油脉宽缓冲区1
+				injectorMainPulseWidthsRealtime = injectorMainPulseWidths0;  // 实时ISR使用主喷油脉宽缓冲区0
+				injectorStagedPulseWidthsMath = injectorStagedPulseWidths1;   // 数学计算使用分级喷油脉宽缓冲区1
+				injectorStagedPulseWidthsRealtime = injectorStagedPulseWidths0; // 实时ISR使用分级喷油脉宽缓冲区0
 			}
 
-			ATOMIC_END(); /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
+			ATOMIC_END(); /* 结束原子操作块 */
 		}else{
-			/* In the event that no calcs are required, sleep a little before returning to retry. */
-			sleepMicro(RuntimeVars.mathTotalRuntime); // not doing this will cause the ISR lockouts to run for too high a proportion of the time
-			/* Using 0.8 ticks as micros so it will run for a little longer than the math did */
+			/* 如果不需要计算，在返回重试之前稍微休眠一下 */
+			// 不这样做会导致ISR锁定运行时间过长
+			sleepMicro(RuntimeVars.mathTotalRuntime);
+			/* 使用 0.8 ticks 作为微秒，所以它将运行得比数学计算稍长一些 */
 		}
 
 
 //		if(!(TXBufferInUseFlags)){
-			/* If the flag for com packet processing is set and the TX buffer is available process the data! */
+			/* 如果设置了通信数据包处理标志且 TX 缓冲区可用，处理数据！ */
 			if(RXStateFlags & RX_READY_TO_PROCESS){
-				/* Clear the flag */
+				/* 清除标志 */
 				RXStateFlags &= RX_CLEAR_READY_TO_PROCESS;
 
-				/* Handle the incoming packet */
+				/* 处理传入的数据包 */
 				decodePacketAndRespond();
-			}//else if(lastCalcCount != Counters.calculationsPerformed){ // substitute true for full speed continuous stream test...
+			}//else if(lastCalcCount != Counters.calculationsPerformed){ // 替换为 true 用于全速连续流测试...
 
 				/* send asynchronous data log if required */
 //				switch (TablesB.SmallTablesB.datalogStreamType) {
@@ -253,24 +265,28 @@ int  main(){ // TODO maybe move this to paged flash ?
 //				lastCalcCount = Counters.calculationsPerformed;
 //			}
 //		}
-		// on once per cycle for main loop heart beat (J0)
+		// 每个周期一次，用于主循环心跳（J0端口）
 		//PORTJ ^= 0x01;
 
 
-		// debug...
+		// 调试代码：通过LED显示串口接收状态
 		if(SCI0CR2 & SCICR2_RX_ENABLE){
+			// 如果串口接收使能，设置PORTK的第2位（点亮LED）
 			PORTK |= BIT2;
 		}else{
+			// 如果串口接收未使能，清除PORTK的第2位（熄灭LED）
 			PORTK &= NBIT2;
 		}
 
 		if(SCI0CR2 & SCICR2_RX_ISR_ENABLE){
+			// 如果串口接收中断使能，设置PORTK的第3位（点亮LED）
 			PORTK |= BIT3;
 		}else{
+			// 如果串口接收中断未使能，清除PORTK的第3位（熄灭LED）
 			PORTK &= NBIT3;
 		}
 
-		// PWM experimentation
+		// PWM 实验性功能
 		adjustPWM();
 	}
 }

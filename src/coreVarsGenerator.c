@@ -57,52 +57,59 @@
  * @author Fred Cooke
  */
 void generateCoreVars(){
-	/*&&&&&&&& Calculate and obtain the basic variables with which we will perform the calculations &&&&&&&&*/
+	/* 计算并获取我们将用于执行计算的基本变量 */
 
 
-	/* Pre calculate things used in multiple places */
+	/* 预计算在多个地方使用的值 */
 
-	/* Bound the TPS ADC reading and shift it to start at zero */
-	unsigned short unboundedTPSADC = ADCArrays->TPS;
+	/* 限制 TPS ADC 读数并将其偏移到从零开始 */
+	unsigned short unboundedTPSADC = ADCArrays->TPS;  // 读取未限制的TPS ADC值
 	if(unboundedTPSADC > fixedConfigs2.sensorRanges.TPSMaximumADC){
+		// 如果ADC值超过最大值，设置为ADC范围
 		boundedTPSADC = TPSADCRange;
-	}else if(unboundedTPSADC > fixedConfigs2.sensorRanges.TPSMinimumADC){ // force secondary config to be used... TODO remove this
+	}else if(unboundedTPSADC > fixedConfigs2.sensorRanges.TPSMinimumADC){ // 强制使用辅助配置... TODO 移除这个
+		// 如果ADC值在最小值和最大值之间，减去最小值得到从零开始的值
 		boundedTPSADC = unboundedTPSADC - fixedConfigs2.sensorRanges.TPSMinimumADC;
 	}else{
+		// 如果ADC值小于等于最小值，设置为0
 		boundedTPSADC = 0;
 	}
 
 
-	/* Get BRV from ADC using transfer variables (all installations need this) */
-	unsigned short localBRV;
-	if(TRUE){ /* If BRV connected  */
+	/* 使用转换变量从 ADC 获取 BRV（所有安装都需要这个） */
+	unsigned short localBRV;  // 局部变量存储电池参考电压
+	if(TRUE){ /* 如果 BRV 已连接 */
+		// 使用线性转换公式：值 = (ADC值 * 范围) / ADC分辨率 + 最小值
+		// 转换为毫伏单位
 		localBRV = (((unsigned long)ADCArrays->BRV * fixedConfigs2.sensorRanges.BRVRange) / ADC_DIVISIONS) + fixedConfigs2.sensorRanges.BRVMinimum;
-	}else if(FALSE){ /* Configured to be fixed value */
-		/* Get the preferred BRV figure from configuration settings */
+	}else if(FALSE){ /* 配置为固定值 */
+		/* 从配置设置中获取首选的 BRV 值 */
 		localBRV = fixedConfigs2.sensorPresets.presetBRV;
-	}else{ /* Fail safe if config is broken */
-		/* Default to normal alternator charging voltage 14.4V */
-		localBRV = runningVoltage;
-		/* If anyone is listening, let them know something is wrong */
-		sendErrorIfClear(BRV_NOT_CONFIGURED_CODE);
+	}else{ /* 如果配置损坏，故障保护 */
+		/* 默认为正常交流发电机充电电压 14.4V */
+		localBRV = runningVoltage;  // 使用运行电压常量（14400毫伏）
+		/* 如果有人监听，让他们知道出了问题 */
+		sendErrorIfClear(BRV_NOT_CONFIGURED_CODE);  // 发送错误代码（如果缓冲区空闲）
 	}
 
 
-	unsigned short localCHT;
-	/* Get CHT from ADC using the transfer table (all installations need this) */
-	if(TRUE){ /* If CHT connected  */
+	unsigned short localCHT;  // 局部变量存储缸盖温度
+	/* 使用转换表从 ADC 获取 CHT（所有安装都需要这个） */
+	if(TRUE){ /* 如果 CHT 已连接 */
+		// 使用查找表直接转换ADC值到温度值（单位：K * 100）
 		localCHT = CHTTransferTable[ADCArrays->CHT];
-	}else if(FALSE){ /* Configured to be read From ADC as dashpot */
-		/* Transfer the ADC reading to an engine temperature in a reasonable way */
-		localCHT = (ADCArrays->CHT * 10) + freezingPoint; /* 0 ADC = 0C = 273.15K = 27315, 1023 ADC = 102.3C = 375.45K = 37545 */
-	}else if(FALSE){ /* Configured to be fixed value */
-		/* Get the preferred CHT figure from configuration settings */
+	}else if(FALSE){ /* 配置为从 ADC 读取作为线性电位器 */
+		/* 以合理的方式将 ADC 读数转换为发动机温度 */
+		// 线性转换：0 ADC = 0°C = 273.15K = 27315, 1023 ADC = 102.3°C = 375.45K = 37545
+		localCHT = (ADCArrays->CHT * 10) + freezingPoint;
+	}else if(FALSE){ /* 配置为固定值 */
+		/* 从配置设置中获取首选的 CHT 值 */
 		localCHT = fixedConfigs2.sensorPresets.presetCHT;
-	}else{ /* Fail safe if config is broken */
-		/* Default to normal running temperature of 85C/358K */
-		localCHT = runningTemperature;
-		/* If anyone is listening, let them know something is wrong */
-		sendErrorIfClear(CHT_NOT_CONFIGURED_CODE);
+	}else{ /* 如果配置损坏，故障保护 */
+		/* 默认为正常运行温度 85°C/358K */
+		localCHT = runningTemperature;  // 使用运行温度常量（35800 = 358K * 100）
+		/* 如果有人监听，让他们知道出了问题 */
+		sendErrorIfClear(CHT_NOT_CONFIGURED_CODE);  // 发送CHT未配置错误代码
 	}
 
 
@@ -140,34 +147,38 @@ void generateCoreVars(){
 	}
 
 
-	unsigned short localMAP;
-	unsigned short localIAP;
-	/* Determine the MAP pressure to use for future calculations */
-	if(TRUE){ /* If MAP sensor is connected */
-		/* get MAP from ADC using transfer variables */
+	unsigned short localMAP;  // 局部变量存储歧管绝对压力
+	unsigned short localIAP;  // 局部变量存储中冷器压力
+	/* 确定用于未来计算的 MAP 压力 */
+	if(TRUE){ /* 如果 MAP 传感器已连接 */
+		/* 使用转换变量从 ADC 获取 MAP */
+		// 线性转换：值 = (ADC值 * 范围) / ADC分辨率 + 最小值
+		// 单位：kPa * 100（例如：10000 = 100.00 kPa）
 		localMAP = (((unsigned long)ADCArrays->MAP * fixedConfigs2.sensorRanges.MAPRange) / ADC_DIVISIONS) + fixedConfigs2.sensorRanges.MAPMinimum;
-		if(TRUE){ /* If Intercooler boost sensor connected */
-			/* Get IAP from ADC using the same transfer variables as they both need to read the same range */
+		if(TRUE){ /* 如果中冷器增压传感器已连接 */
+			/* 使用相同的转换变量从 ADC 获取 IAP，因为它们都需要读取相同的范围 */
 			localIAP = (((unsigned long)ADCArrays->IAP * fixedConfigs2.sensorRanges.MAPRange) / ADC_DIVISIONS) + fixedConfigs2.sensorRanges.MAPMinimum;
 		}
-	}else if(FALSE){ /* Configured for MAP to imitate TPS signal */
-		/* Get MAP from TPS via conversion */
+	}else if(FALSE){ /* 配置为 MAP 模拟 TPS 信号 */
+		/* 通过转换从 TPS 获取 MAP */
+		// 将TPS ADC值转换为MAP值，用于Alpha-N模式
 		localMAP = (((unsigned long)boundedTPSADC * TPSMAPRange) / TPSADCRange) + fixedConfigs2.sensorRanges.TPSClosedMAP;
-	}else if(FALSE){ /* Configured for dash potentiometer on ADC */
-		/* Get MAP from ADC via conversion to internal kPa figure where 1023ADC = 655kPa */
+	}else if(FALSE){ /* 配置为 ADC 上的线性电位器 */
+		/* 通过转换从 ADC 获取 MAP，转换为内部 kPa 值，其中 1023ADC = 655kPa */
+		// 左移6位相当于乘以64：1023 * 64 = 65472 ≈ 65500 (655.00 kPa)
 		localMAP = ADCArrays->MAP << 6;
-		if(TRUE){ /* If Intercooler boost sensor enabled */
-			/* Get IAP from ADC via conversion to internal kPa figure where 1023ADC = 655kPa */
+		if(TRUE){ /* 如果中冷器增压传感器已启用 */
+			/* 通过转换从 ADC 获取 IAP，转换为内部 kPa 值，其中 1023ADC = 655kPa */
 			localIAP = ADCArrays->IAP << 6;
 		}
-	}else if(FALSE){ /* Configured for fixed MAP from config */
-		/* Get the preferred MAP figure from configuration settings */
+	}else if(FALSE){ /* 配置为从配置中获取固定 MAP */
+		/* 从配置设置中获取首选的 MAP 值 */
 		localMAP = fixedConfigs2.sensorPresets.presetMAP;
-	}else{ /* Fail safe if config is broken */
-		/* Default to zero to nulify all other calcs and effectively cut fuel */
-		localMAP = 0;
-		/* If anyone is listening, let them know something is wrong */
-		sendErrorIfClear(MAP_NOT_CONFIGURED_CODE); // or maybe queue it?
+	}else{ /* 如果配置损坏，故障保护 */
+		/* 默认为零以取消所有其他计算并有效切断燃油 */
+		localMAP = 0;  // MAP为0会导致燃油计算为0，从而切断燃油供应
+		/* 如果有人监听，让他们知道出了问题 */
+		sendErrorIfClear(MAP_NOT_CONFIGURED_CODE); // 或者可能将其排队？
 	}
 
 
@@ -231,62 +242,64 @@ void generateCoreVars(){
 	}
 
 
-	unsigned short localTPS;
-	/* Get TPS percentage */
-	if(TRUE){ /* If TPS is connected */
-		/* Get TPS from ADC no need to add TPS min as we know it is zero by definition */
+	unsigned short localTPS;  // 局部变量存储节气门位置百分比
+	/* 获取 TPS 百分比 */
+	if(TRUE){ /* 如果 TPS 已连接 */
+		/* 从 ADC 获取 TPS，不需要添加 TPS 最小值，因为我们知道根据定义它是零 */
+		// 将ADC值转换为百分比：值 = (ADC值 * 最大值) / ADC范围
+		// TPS_RANGE_MAX 通常是 64000，表示 100% = 64000/640
 		localTPS = ((unsigned long)boundedTPSADC * TPS_RANGE_MAX) / TPSADCRange;
-	}else if(FALSE){ /* Configured for TPS to imitate MAP signal */
-		/* Get TPS from MAP via conversion */
-		/* Box MAP signal down */
-		if(localTPS > fixedConfigs2.sensorRanges.TPSOpenMAP){ /* Greater than ~95kPa */
+	}else if(FALSE){ /* 配置为 TPS 模拟 MAP 信号 */
+		/* 通过转换从 MAP 获取 TPS */
+		/* 将 MAP 信号限制在范围内 */
+		if(localTPS > fixedConfigs2.sensorRanges.TPSOpenMAP){ /* 大于 ~95kPa */
 			localTPS = TPS_RANGE_MAX; /* 64000/640 = 100% */
-		}else if(localTPS < fixedConfigs2.sensorRanges.TPSClosedMAP){ /* Less than ~30kPa */
-			localTPS = 0;
-		}else{ /* Scale MAP range to TPS range */
+		}else if(localTPS < fixedConfigs2.sensorRanges.TPSClosedMAP){ /* 小于 ~30kPa */
+			localTPS = 0;  // 小于关闭MAP值，设置为0%
+		}else{ /* 将 MAP 范围缩放到 TPS 范围 */
+			// 计算MAP值相对于关闭MAP的偏移量
 			localTPS = localMAP - fixedConfigs2.sensorRanges.TPSClosedMAP;
 		}
-		// get TPS from MAP no need to add TPS min as we know it is zero by definition
+		// 从 MAP 获取 TPS，不需要添加 TPS 最小值，因为我们知道根据定义它是零
+		// 将MAP范围映射到TPS百分比范围
 		localTPS = ((unsigned long)localTPS * TPS_RANGE_MAX) / (fixedConfigs2.sensorRanges.TPSOpenMAP - fixedConfigs2.sensorRanges.TPSClosedMAP);
-	}else if(FALSE){ /* Configured for dash potentiometer on ADC */
-		/* Get TPS from ADC as shown : 1023 ADC = 100%, 0 ADC = 0% */
+	}else if(FALSE){ /* 配置为 ADC 上的线性电位器 */
+		/* 从 ADC 获取 TPS，如所示：1023 ADC = 100%，0 ADC = 0% */
+		// 直接线性转换，无需校准
 		localTPS = ((unsigned long)ADCArrays->TPS * TPS_RANGE_MAX) / ADC_DIVISIONS;
-	}else if(FALSE){ /* Configured for fixed TPS from config */
-		/* Get the preferred TPS figure from configuration settings */
+	}else if(FALSE){ /* 配置为从配置中获取固定 TPS */
+		/* 从配置设置中获取首选的 TPS 值 */
 		localTPS = fixedConfigs2.sensorPresets.presetTPS;
-	}else{ /* Fail safe if config is broken */
-		/* Default to 50% to not trigger any WOT or CT conditions */
-		localTPS = halfThrottle;
-		/* If anyone is listening, let them know something is wrong */
-		sendErrorIfClear(TPS_NOT_CONFIGURED_CODE); // or maybe queue it?
+	}else{ /* 如果配置损坏，故障保护 */
+		/* 默认为 50% 以不触发任何 WOT（全开节气门）或 CT（关闭节气门）条件 */
+		localTPS = halfThrottle;  // 使用半节气门常量（32000 = 50%）
+		/* 如果有人监听，让他们知道出了问题 */
+		sendErrorIfClear(TPS_NOT_CONFIGURED_CODE); // 或者可能将其排队？
 	}
 
 
-	/* Get RPM by locking out ISRs for a second and grabbing the Tooth logging data */
-	//atomic start
-	// copy rpm data
-	//atomic end
+	/* 通过锁定 ISR 一秒钟并获取齿记录数据来获取 RPM */
+	// 原子操作开始
+	// 复制 rpm 数据
+	// 原子操作结束
 
-	// Calculate RPM and delta RPM and delta delta RPM from data recorded
-	CoreVars->RPM = *RPM; // temporary!!
-	unsigned short localDRPM = 0;
-	unsigned short localDDRPM = 0;
-
-
-	/*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
+	// 从记录的数据计算 RPM 和增量 RPM 以及增量增量 RPM
+	CoreVars->RPM = *RPM; // 临时实现！！
+	unsigned short localDRPM = 0;   // 局部变量存储RPM变化率（未实现）
+	unsigned short localDDRPM = 0;  // 局部变量存储RPM变化加速度（未实现）
 
 
+	/* 变量平均处理部分 */
 
 
-	/*&&&&&&&&&&&&&&&&&&&&&&&&&&&& Average the variables as per the configuration &&&&&&&&&&&&&&&&&&&&&&&&&&*/
-	/* Strictly speaking only the primary variables need to be averaged. After that, the derived ones are	*/
-	/* already averaged in a way. However, there may be some advantage to some short term averaging on the	*/
-	/* derived ones also, so it is something to look into later.											*/
+	/* 根据配置对变量进行平均 */
+	/* 严格来说，只有主要变量需要平均。之后，派生变量在某种程度上已经平均了。*/
+	/* 但是，对派生变量进行一些短期平均可能也有优势，所以这是以后需要研究的事情。*/
 
-	/// @todo TODO average the generated values here
+	/// @todo TODO 在这里对生成的值进行平均
 
-//			newVal var word        ' the value from the ADC
-//			smoothed var word    ' a nicely smoothed result
+//			newVal var word        ' 来自 ADC 的值
+//			smoothed var word    ' 一个很好的平滑结果
 //
 //			if newval > smoothed then
 //			        smoothed = smoothed + (newval - smoothed)/alpha
@@ -294,31 +307,31 @@ void generateCoreVars(){
 //			        smoothed = smoothed - (smoothed - newval)/alpha
 //			endif
 
-	// from : http://www.tigoe.net/pcomp/code/category/code/arduinowiring/41
+	// 来自：http://www.tigoe.net/pcomp/code/category/code/arduinowiring/41
 
-	// for now just copy them in.
-	CoreVars->IAT = localIAT;
-	CoreVars->CHT = localCHT;
-	CoreVars->TPS = localTPS;
-	CoreVars->EGO = localEGO;
-	CoreVars->BRV = localBRV;
-	CoreVars->MAP = localMAP;
-	CoreVars->AAP = localAAP;
-	CoreVars->MAT = localMAT;
+	// 目前只是将它们复制进去
+	CoreVars->IAT = localIAT;    // 存储进气温度
+	CoreVars->CHT = localCHT;    // 存储缸盖温度
+	CoreVars->TPS = localTPS;    // 存储节气门位置
+	CoreVars->EGO = localEGO;    // 存储主氧传感器值
+	CoreVars->BRV = localBRV;    // 存储电池参考电压
+	CoreVars->MAP = localMAP;    // 存储歧管绝对压力
+	CoreVars->AAP = localAAP;    // 存储大气压力
+	CoreVars->MAT = localMAT;    // 存储歧管温度
 
-	CoreVars->EGO2 = localEGO2;
-	CoreVars->IAP = localIAP;
-	CoreVars->MAF = localMAF;
-	CoreVars->DRPM = localDRPM;
-	CoreVars->DDRPM = localDDRPM;
+	CoreVars->EGO2 = localEGO2;   // 存储第二氧传感器值
+	CoreVars->IAP = localIAP;    // 存储中冷器压力
+	CoreVars->MAF = localMAF;    // 存储质量空气流量
+	CoreVars->DRPM = localDRPM;  // 存储RPM变化率（当前为0）
+	CoreVars->DDRPM = localDDRPM; // 存储RPM变化加速度（当前为0）
 
-	// later...
+	// 稍后实现...
 	unsigned short i;
 	for(i=0;i<CORE_VARS_LENGTH;i++){ // TODO
-		/* Perform averaging on all primary variables as per the configuration array */
-		// get old value(s)
-		// process new and old to produce result based on config array value */
-		// assign result to old value holder
+		/* 根据配置数组对所有主要变量执行平均 */
+		// 获取旧值
+		// 根据配置数组值处理新旧值以产生结果
+		// 将结果分配给旧值持有者
 	} // TODO
 
 	/*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
