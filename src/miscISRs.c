@@ -48,8 +48,9 @@
  * @author Fred Cooke
  */
 void UISR(void){
-	/* Increment the unimplemented ISR execution counter */
-	Counters.callsToUISRs++;
+	/* 递增未实现的 ISR 执行计数器
+	 * 用于处理未预期的中断调用 */
+	Counters.callsToUISRs++;  // 增加未实现 ISR 调用计数
 }
 
 
@@ -60,11 +61,12 @@ void UISR(void){
  * @author Fred Cooke
  */
 void PortPISR(void){
-	/* Clear all port P flags (we only want one at a time) */
-	PIFP = ONES;
-	/* Increment the unimplemented ISR execution counter */
-	Counters.callsToUISRs++;
-}			/* Port P interrupt service routine */
+	/* 清除所有端口 P 标志（我们一次只需要一个） */
+	PIFP = ONES;  // 清除所有端口 P 中断标志位
+	/* 递增未实现的 ISR 执行计数器
+	 * 当前未使用，仅用于计数 */
+	Counters.callsToUISRs++;  // 增加未实现 ISR 调用计数
+}			/* Port P 中断服务例程 */
 
 
 /** @brief Port J pins ISR
@@ -74,10 +76,12 @@ void PortPISR(void){
  * @author Fred Cooke
  */
 void PortJISR(void){
-	/* Clear all port H flags (we only want one at a time) */
-	PIFJ = ONES;
-	/* Increment the unimplemented ISR execution counter */
-	Counters.callsToUISRs++;
+	/* 清除所有端口 J 标志（注释说端口 H，但实际是端口 J）
+	 * 我们一次只需要一个 */
+	PIFJ = ONES;  // 清除所有端口 J 中断标志位
+	/* 递增未实现的 ISR 执行计数器
+	 * 当前未使用，仅用于计数 */
+	Counters.callsToUISRs++;  // 增加未实现 ISR 调用计数
 }
 
 
@@ -88,11 +92,13 @@ void PortJISR(void){
  * @author Fred Cooke
  */
 void IRQISR(void){
-	/* Clear the flag */
-	// ?? TODO
+	/* 清除标志
+	 * 待实现：需要确定如何清除 IRQ 标志 */
+	// ?? TODO  // 待实现：清除 IRQ 标志
 
-	/* Increment the unimplemented ISR execution counter */
-	Counters.callsToUISRs++;
+	/* 递增未实现的 ISR 执行计数器
+	 * 当前未使用，仅用于计数 */
+	Counters.callsToUISRs++;  // 增加未实现 ISR 调用计数
 }
 
 
@@ -103,11 +109,13 @@ void IRQISR(void){
  * @author Fred Cooke
  */
 void XIRQISR(void){
-	/* Clear the flag */
-	// ?? TODO
+	/* 清除标志
+	 * 待实现：需要确定如何清除 XIRQ 标志 */
+	// ?? TODO  // 待实现：清除 XIRQ 标志
 
-	/* Increment the unimplemented ISR execution counter */
-	Counters.callsToUISRs++;
+	/* 递增未实现的 ISR 执行计数器
+	 * 当前未使用，仅用于计数 */
+	Counters.callsToUISRs++;  // 增加未实现 ISR 调用计数
 }
 
 
@@ -118,9 +126,11 @@ void XIRQISR(void){
  * @author Fred Cooke
  */
 void LowVoltageISR(void){
-	/* Clear the flag */
-	VREGCTRL |= 0x01;
+	/* 清除标志
+	 * 写入 1 到 BIT0 清除低电压中断标志 */
+	VREGCTRL |= 0x01;  // BIT0: 低电压中断标志位（写入 1 清除）
 
-	/* Increment the counter */
-	Counters.lowVoltageConditions++;
+	/* 递增计数器
+	 * 记录电压低于正常值但未复位的次数 */
+	Counters.lowVoltageConditions++;  // 增加低电压条件计数
 }

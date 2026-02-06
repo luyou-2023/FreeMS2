@@ -234,17 +234,19 @@
  * @author Fred Cooke
  */
 void decodePacketAndRespond(){
-	TXBufferCurrentPositionSCI0 = RXBuffer;
-	TXPacketLengthToSendSCI0 = RXPacketLengthReceived;
+	// 当前实现：简单回显接收到的数据包
+	TXBufferCurrentPositionSCI0 = RXBuffer;  // 设置发送缓冲区当前位置为接收缓冲区（回显）
+	TXPacketLengthToSendSCI0 = RXPacketLengthReceived;  // 设置发送包长度为接收包长度
 
-	/* Initiate transmission */
-	SCI0DRL = START_BYTE;
-	while(!(SCI0SR1 & 0x80)){/* Wait for ever until able to send then move on */}
-	SCI0DRL = START_BYTE; // nasty hack that works... means at least one and most 2 starts are sent so stuff works, but is messy... there must be a better way.
+	/* 启动传输 */
+	SCI0DRL = START_BYTE;  // 发送起始字节
+	while(!(SCI0SR1 & 0x80)){/* 永远等待直到能够发送然后继续 */}
+	// 等待发送数据寄存器空（BIT7: TDRE 标志）
+	SCI0DRL = START_BYTE; // 丑陋的 hack，但有效...意味着至少发送一个，最多 2 个起始字节，所以东西可以工作，但很混乱...必须有更好的方法。
 
-	/* Note : Order Is Important! */
-	/* TX empty flag is already set, so we must clear it by writing out before enabling the interrupt */
-	SCI0CR2 |= SCICR2_TX_ISR_ENABLE;
+	/* 注意：顺序很重要！ */
+	/* TX 空标志已经设置，所以我们必须在启用中断之前通过写入来清除它 */
+	SCI0CR2 |= SCICR2_TX_ISR_ENABLE;  // 启用发送中断（BIT7: TIE 位）
 }
 //{	/* Extract and build up the header fields */
 //	RXBufferCurrentPosition = (unsigned char*)&RXBuffer;

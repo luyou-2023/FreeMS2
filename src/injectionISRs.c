@@ -46,72 +46,74 @@
 #include "inc/injectionISRs.h"
 
 
-/* Define the variables correctly for each channel then import the code */
+/* 为每个通道正确定义变量，然后导入代码
+ * 使用宏定义和 #include 来生成多个 ISR 实例，避免代码重复 */
 
-/* Channel 1 */
-#define INJECTOR_CHANNEL_NUMBER 0
-#define InjectorXISR Injector1ISR
-#define STAGEDXOFF STAGED1OFF
-#define STAGEDXON STAGED1ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 1 */
+#define INJECTOR_CHANNEL_NUMBER 0  // 定义通道编号为 0
+#define InjectorXISR Injector1ISR  // 定义 ISR 函数名为 Injector1ISR
+#define STAGEDXOFF STAGED1OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED1ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码，宏定义会被替换
+#undef InjectorXISR  // 取消定义，为下一个通道准备
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* Channel 2 */
-#define INJECTOR_CHANNEL_NUMBER 1
-#define InjectorXISR Injector2ISR
-#define STAGEDXOFF STAGED2OFF
-#define STAGEDXON STAGED2ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 2 */
+#define INJECTOR_CHANNEL_NUMBER 1  // 定义通道编号为 1
+#define InjectorXISR Injector2ISR  // 定义 ISR 函数名为 Injector2ISR
+#define STAGEDXOFF STAGED2OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED2ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码
+#undef InjectorXISR  // 取消定义
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* Channel 3 */
-#define INJECTOR_CHANNEL_NUMBER 2
-#define InjectorXISR Injector3ISR
-#define STAGEDXOFF STAGED3OFF
-#define STAGEDXON STAGED3ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 3 */
+#define INJECTOR_CHANNEL_NUMBER 2  // 定义通道编号为 2
+#define InjectorXISR Injector3ISR  // 定义 ISR 函数名为 Injector3ISR
+#define STAGEDXOFF STAGED3OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED3ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码
+#undef InjectorXISR  // 取消定义
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* Channel 4 */
-#define INJECTOR_CHANNEL_NUMBER 3
-#define InjectorXISR Injector4ISR
-#define STAGEDXOFF STAGED4OFF
-#define STAGEDXON STAGED4ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 4 */
+#define INJECTOR_CHANNEL_NUMBER 3  // 定义通道编号为 3
+#define InjectorXISR Injector4ISR  // 定义 ISR 函数名为 Injector4ISR
+#define STAGEDXOFF STAGED4OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED4ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码
+#undef InjectorXISR  // 取消定义
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* Channel 5 */
-#define INJECTOR_CHANNEL_NUMBER 4
-#define InjectorXISR Injector5ISR
-#define STAGEDXOFF STAGED5OFF
-#define STAGEDXON STAGED5ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 5 */
+#define INJECTOR_CHANNEL_NUMBER 4  // 定义通道编号为 4
+#define InjectorXISR Injector5ISR  // 定义 ISR 函数名为 Injector5ISR
+#define STAGEDXOFF STAGED5OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED5ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码
+#undef InjectorXISR  // 取消定义
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* Channel 6 */
-#define INJECTOR_CHANNEL_NUMBER 5
-#define InjectorXISR Injector6ISR
-#define STAGEDXOFF STAGED6OFF
-#define STAGEDXON STAGED6ON
-#include "inc/injectorISR.c"
-#undef InjectorXISR
-#undef STAGEDXOFF
-#undef STAGEDXON
-#undef INJECTOR_CHANNEL_NUMBER
+/* 通道 6 */
+#define INJECTOR_CHANNEL_NUMBER 5  // 定义通道编号为 5
+#define InjectorXISR Injector6ISR  // 定义 ISR 函数名为 Injector6ISR
+#define STAGEDXOFF STAGED6OFF  // 定义分级喷油器关闭掩码
+#define STAGEDXON STAGED6ON  // 定义分级喷油器开启掩码
+#include "inc/injectorISR.c"  // 包含共享的 ISR 代码
+#undef InjectorXISR  // 取消定义
+#undef STAGEDXOFF  // 取消定义
+#undef STAGEDXON  // 取消定义
+#undef INJECTOR_CHANNEL_NUMBER  // 取消定义
 
-/* If switching to 8 OC channels with non-IC engine input, place two more sets of defines here :-) (along with all the other mods needed of course) */
+/* 如果切换到 8 个 OC 通道且使用非 IC 发动机输入，在这里放置另外两组定义 :-)
+ * （当然还需要所有其他必要的修改） */

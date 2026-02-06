@@ -65,9 +65,9 @@
  * @param rawValue is the raw byte to be sent down the serial line.
  */
 extern inline void sendAndIncrement(unsigned char rawValue){
-	SCI0DRL = rawValue;
-	TXPacketLengthToSendSCI0--;
-	TXBufferCurrentPositionSCI0++;
+	SCI0DRL = rawValue;  // 将字节写入 SCI0 数据寄存器，启动发送
+	TXPacketLengthToSendSCI0--;  // 递减待发送数据包长度
+	TXBufferCurrentPositionSCI0++;  // 递增发送缓冲区指针
 }
 
 
@@ -82,10 +82,10 @@ extern inline void sendAndIncrement(unsigned char rawValue){
  * @param value is the byte of data to store in the buffer and add to the checksum.
  */
 extern inline void receiveAndIncrement(const unsigned char value){
-	*RXBufferCurrentPosition = value;
-	RXCalculatedChecksum += value;
-	RXBufferCurrentPosition++;
-	RXPacketLengthReceived++;
+	*RXBufferCurrentPosition = value;  // 将接收到的字节存储到接收缓冲区
+	RXCalculatedChecksum += value;  // 将字节值累加到校验和中
+	RXBufferCurrentPosition++;  // 递增接收缓冲区指针
+	RXPacketLengthReceived++;  // 递增已接收数据包长度
 }
 
 
@@ -100,37 +100,37 @@ extern inline void receiveAndIncrement(const unsigned char value){
  * @param sourceIDState is the state to apply to the RX buffer state variable.
  */
 void resetReceiveState(unsigned char sourceIDState){
-	/* Set the receive buffer pointer to the beginning */
+	/* 将接收缓冲区指针设置到开始位置 */
 	RXBufferCurrentPosition = (unsigned char*)&RXBuffer;
 
-	/* Zero the flags, buffer length and checksum */
-	RXPacketLengthReceived = 0;
-	RXCalculatedChecksum = 0;
-	RXStateFlags = 0;
+	/* 清零标志、缓冲区长度和校验和 */
+	RXPacketLengthReceived = 0;  // 重置已接收数据包长度为 0
+	RXCalculatedChecksum = 0;  // 重置计算的校验和为 0
+	RXStateFlags = 0;  // 清零接收状态标志
 
-	/* Set the source ID state (clear all or all but one flag(s)) */
+	/* 设置源 ID 状态（清除所有标志或保留一个标志） */
 	RXBufferContentSourceID = sourceIDState;
 
-	/* Which ever interface we are setting is the one we came from. By definition	*/
-	/* it must be on and we want it to stay on, so just turn off all the others.	*/
+	/* 无论我们设置哪个接口，它都是我们来自的接口。根据定义，
+	 * 它必须是打开的，我们希望它保持打开，所以只需关闭所有其他接口。 */
 	if(sourceIDState & COM_SET_SCI0_INTERFACE_ID){
-		/* Turn off all others here */
-		/// @todo TODO CAN0CTL1 &= CANCTL1_RX_DISABLE;
-		/// @todo TODO CAN0CTL1 &= CANCTL1_RX_ISR_DISABLE;
-		/* SPI ? I2C ? SCI1 ? */
+		/* 在这里关闭所有其他接口 */
+		/// @todo TODO CAN0CTL1 &= CANCTL1_RX_DISABLE;  // 待实现：禁用 CAN0 接收
+		/// @todo TODO CAN0CTL1 &= CANCTL1_RX_ISR_DISABLE;  // 待实现：禁用 CAN0 接收中断
+		/* SPI ? I2C ? SCI1 ? */  // 待实现：其他接口
 	}else if(sourceIDState & COM_SET_CAN0_INTERFACE_ID){
-		/* Turn off all others here */
-		/* Only SCI for now */
-		SCI0CR2 &= SCICR2_RX_DISABLE;
-		SCI0CR2 &= SCICR2_RX_ISR_DISABLE;
-		/* SPI ? I2C ? SCI1 ? */
-	}else{ /* If clearing all flags then enable RX on all interfaces */
-		/* Only SCI for now */
-		SCI0CR2 |= SCICR2_RX_ENABLE;
-		SCI0CR2 |= SCICR2_RX_ISR_ENABLE;
-		/// @todo TODO CAN0CTL1 |= CANCTL1_RX_ENABLE;
-		/// @todo TODO CAN0CTL1 |= CANCTL1_RX_ISR_ENABLE;
-		/* SPI ? I2C ? SCI1 ? */
+		/* 在这里关闭所有其他接口 */
+		/* 目前只有 SCI */
+		SCI0CR2 &= SCICR2_RX_DISABLE;  // 禁用 SCI0 接收
+		SCI0CR2 &= SCICR2_RX_ISR_DISABLE;  // 禁用 SCI0 接收中断
+		/* SPI ? I2C ? SCI1 ? */  // 待实现：其他接口
+	}else{ /* 如果清除所有标志，则在所有接口上启用接收 */
+		/* 目前只有 SCI */
+		SCI0CR2 |= SCICR2_RX_ENABLE;  // 启用 SCI0 接收
+		SCI0CR2 |= SCICR2_RX_ISR_ENABLE;  // 启用 SCI0 接收中断
+		/// @todo TODO CAN0CTL1 |= CANCTL1_RX_ENABLE;  // 待实现：启用 CAN0 接收
+		/// @todo TODO CAN0CTL1 |= CANCTL1_RX_ISR_ENABLE;  // 待实现：启用 CAN0 接收中断
+		/* SPI ? I2C ? SCI1 ? */  // 待实现：其他接口
 	}
 }
 
@@ -148,171 +148,176 @@ void resetReceiveState(unsigned char sourceIDState){
  * @todo TODO Remove the debug code that uses the IO ports to light LEDs during specific actions.
  */
 void SCI0ISR(){
-	/* Read the flags register */
+	/* 读取状态寄存器 */
 	unsigned char flags = SCI0SR1;
-	/* Note: Combined with reading or writing the data register this also clears the flags. */
+	/* 注意：结合读取或写入数据寄存器，这也会清除标志。 */
 
-	/* Start counting */
+	/* 开始计时（用于性能测量） */
 	unsigned short start = TCNT;
 
-	/* If the RX interrupt is enabled check RX related flags */
+	/* 如果接收中断已启用，检查接收相关标志 */
 	if(SCI0CR2 & SCICR2_RX_ISR_ENABLE){
-		/* Grab the received byte from the register */
+		/* 从寄存器中获取接收到的字节 */
 		unsigned char rawByte = SCI0DRL;
 
-		//PORTB |= BIT0;
-		PORTB = ONES;
+		//PORTB |= BIT0;  // 已注释：调试 LED
+		PORTB = ONES;  // 调试：设置所有 PORTB 位（用于调试）
 
-		/* Record error conditions always */
+		/* 始终记录错误条件 */
 		unsigned char resetOnError = 0;
-		/* If there is noise on the receive line record it */
+		/* 如果接收线上有噪声，记录它 */
 		if(flags & SCISR1_RX_NOISE){
-			Counters.serialNoiseErrors++;
-			resetOnError++;
-		}/* If an overrun occurs record it */
+			Counters.serialNoiseErrors++;  // 增加噪声错误计数
+			resetOnError++;  // 标记需要重置
+		}/* 如果发生溢出，记录它 */
 		if(flags & SCISR1_RX_OVERRUN){
-			Counters.serialOverrunErrors++;
-			resetOnError++;
-		}/* If a framing error occurs record it */
+			Counters.serialOverrunErrors++;  // 增加溢出错误计数
+			resetOnError++;  // 标记需要重置
+		}/* 如果发生帧错误，记录它 */
 		if(flags & SCISR1_RX_FRAMING){
-			Counters.serialFramingErrors++;
-			resetOnError++;
-		}/* If a parity error occurs record it */
+			Counters.serialFramingErrors++;  // 增加帧错误计数
+			resetOnError++;  // 标记需要重置
+		}/* 如果发生奇偶校验错误，记录它 */
 		if(flags & SCISR1_RX_PARITY){
-			Counters.serialParityErrors++;
-			resetOnError++;
+			Counters.serialParityErrors++;  // 增加奇偶校验错误计数
+			resetOnError++;  // 标记需要重置
 		}
 
-		/* Drop out because of error flags	*/
+		/* 由于错误标志而退出 */
 		if(resetOnError){
-			resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);
-			PORTB |= BIT1;
-			return;
+			resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);  // 重置接收状态
+			PORTB |= BIT1;  // 调试：设置错误指示 LED
+			return;  // 退出 ISR
 		}
 
-		/* If there is data waiting to be received */
+		/* 如果有数据等待接收 */
 		if(flags & SCISR1_RX_REGISTER_FULL){
-			PORTB |= BIT2;
-			/* Look for a start bresetReceiveStateyte to indicate a new packet */
+			PORTB |= BIT2;  // 调试：设置接收指示 LED
+			/* 查找起始字节以指示新数据包 */
 			if(rawByte == START_BYTE){
-				PORTM ^= BIT3;
-				/* If another interface is using it (Note, clear flag, not normal) */
+				PORTM ^= BIT3;  // 调试：切换起始字节指示 LED
+				/* 如果另一个接口正在使用它（注意，清除标志，不正常） */
 				if(RXBufferContentSourceID & COM_CLEAR_SCI0_INTERFACE_ID){
-					/* Turn off our reception */
-					SCI0CR2 &= SCICR2_RX_DISABLE;
-					SCI0CR2 &= SCICR2_RX_ISR_DISABLE;
-					PORTB |= BIT4;
+					/* 关闭我们的接收 */
+					SCI0CR2 &= SCICR2_RX_DISABLE;  // 禁用 SCI0 接收
+					SCI0CR2 &= SCICR2_RX_ISR_DISABLE;  // 禁用 SCI0 接收中断
+					PORTB |= BIT4;  // 调试：设置接口冲突指示 LED
 				}else{
-					PORTB |= BIT5;
-					/* If we are using it */
+					PORTB |= BIT5;  // 调试：设置正常起始字节指示 LED
+					/* 如果我们正在使用它 */
 					if(RXBufferContentSourceID & COM_SET_SCI0_INTERFACE_ID){
-						/* Increment the counter */
+						/* 增加计数器（在数据包内收到起始字节） */
 						Counters.serialStartsInsideAPacket++;
 					}
-					/* Reset to us using it unless someone else was */
-					resetReceiveState(COM_SET_SCI0_INTERFACE_ID);
+					/* 重置为我们使用它，除非其他人正在使用 */
+					resetReceiveState(COM_SET_SCI0_INTERFACE_ID);  // 重置接收状态，设置 SCI0 接口 ID
 				}
 			}else if(RXPacketLengthReceived >= RX_BUFFER_SIZE){
-				/* Buffer was full, record and reset */
-				Counters.serialPacketsOverLength++;
-				resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);
-				PORTB |= BIT6;
+				/* 缓冲区已满，记录并重置 */
+				Counters.serialPacketsOverLength++;  // 增加超长数据包计数
+				resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);  // 重置接收状态
+				PORTB |= BIT6;  // 调试：设置缓冲区满指示 LED
 			}else if(RXBufferContentSourceID & COM_SET_SCI0_INTERFACE_ID){
+				// 如果设置了转义下一个字节标志（上一个字节是转义字节）
 				if(RXStateFlags & RX_SCI_ESCAPED_NEXT){
-					PORTB |= BIT7;
-					/* Clear escaped byte next flag, thanks Karsten! ((~ != !) == (! ~= ~)) == LOL */
+					PORTB |= BIT7;  // 调试：设置转义处理指示 LED
+					/* 清除转义下一个字节标志，感谢 Karsten！ ((~ != !) == (! ~= ~)) == LOL */
 					RXStateFlags &= RX_SCI_NOT_ESCAPED_NEXT;
 
+					// 处理转义的字节
 					if(rawByte == ESCAPED_ESCAPE_BYTE){
-						/* Store and checksum escape byte */
-						receiveAndIncrement(ESCAPE_BYTE);
+						/* 存储并校验转义字节 */
+						receiveAndIncrement(ESCAPE_BYTE);  // 转义的转义字节 → 转义字节
 					}else if(rawByte == ESCAPED_START_BYTE){
-						/* Store and checksum start byte */
-						receiveAndIncrement(START_BYTE);
+						/* 存储并校验起始字节 */
+						receiveAndIncrement(START_BYTE);  // 转义的起始字节 → 起始字节
 					}else if(rawByte == ESCAPED_STOP_BYTE){
-						/* Store and checksum stop byte */
-						receiveAndIncrement(STOP_BYTE);
+						/* 存储并校验停止字节 */
+						receiveAndIncrement(STOP_BYTE);  // 转义的停止字节 → 停止字节
 					}else{
-						/* Otherwise reset and record as data is bad */
-						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);
-						Counters.serialEscapePairMismatches++;
+						/* 否则重置并记录为数据错误 */
+						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);  // 重置接收状态
+						Counters.serialEscapePairMismatches++;  // 增加转义对不匹配计数
 					}
 				}else if(rawByte == ESCAPE_BYTE){
-					PORTA |= BIT0;
-					/* Set flag to indicate that the next byte should be un-escaped. */
-					RXStateFlags |= RX_SCI_ESCAPED_NEXT;
+					PORTA |= BIT0;  // 调试：设置转义字节指示 LED
+					/* 设置标志以指示下一个字节应该被解转义。 */
+					RXStateFlags |= RX_SCI_ESCAPED_NEXT;  // 标记下一个字节是转义的
 				}else if(rawByte == STOP_BYTE){
-					PORTM ^= BIT4;
-					/* Turn off reception */
-					SCI0CR2 &= SCICR2_RX_DISABLE;
-					SCI0CR2 &= SCICR2_RX_ISR_DISABLE;
+					PORTM ^= BIT4;  // 调试：切换停止字节指示 LED
+					/* 关闭接收 */
+					SCI0CR2 &= SCICR2_RX_DISABLE;  // 禁用 SCI0 接收
+					SCI0CR2 &= SCICR2_RX_ISR_DISABLE;  // 禁用 SCI0 接收中断
 
-					/* Bring the checksum back to where it should be */
+					/* 将校验和恢复到应该的位置
+					 * 停止字节前一个字节是接收到的校验和 */
 					unsigned char RXReceivedChecksum = (unsigned char)*(RXBufferCurrentPosition - 1);
-					RXCalculatedChecksum -= RXReceivedChecksum;
+					RXCalculatedChecksum -= RXReceivedChecksum;  // 从计算的校验和中减去接收到的校验和
 
-					/* Check that the checksum matches and that the packet is big enough for header,ID,checksum */
+					/* 检查校验和是否匹配，以及数据包是否足够大（包含头部、ID、校验和） */
 					if(RXPacketLengthReceived < 4){
-						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);
-						Counters.commsPacketsUnderMinLength++;
+						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);  // 数据包太短，重置
+						Counters.commsPacketsUnderMinLength++;  // 增加最小长度不足计数
 					}else if(RXCalculatedChecksum == RXReceivedChecksum){
-						/* If it's OK set process flag */
-						RXStateFlags |= RX_READY_TO_PROCESS;
-						PORTA |= BIT2;
+						/* 如果校验和匹配，设置处理标志 */
+						RXStateFlags |= RX_READY_TO_PROCESS;  // 标记数据包准备就绪，通知主循环处理
+						PORTA |= BIT2;  // 调试：设置校验和匹配指示 LED
 					}else{
-						PORTA |= BIT3;
-						/* Otherwise reset the state and record it */
-						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);
-						Counters.commsChecksumMismatches++;
+						PORTA |= BIT3;  // 调试：设置校验和不匹配指示 LED
+						/* 否则重置状态并记录它 */
+						resetReceiveState(CLEAR_ALL_SOURCE_ID_FLAGS);  // 校验和不匹配，重置
+						Counters.commsChecksumMismatches++;  // 增加校验和不匹配计数
 					}
 				}else{
-					PORTM ^= BIT5;
-					/* If it isn't special process it! */
-					receiveAndIncrement(rawByte);
+					PORTM ^= BIT5;  // 调试：切换正常数据字节指示 LED
+					/* 如果它不是特殊字节，正常处理它！ */
+					receiveAndIncrement(rawByte);  // 存储字节并更新校验和
 				}
 			}else{
-				/* Do nothing : drop the byte */
-				PORTA |= BIT5;
+				/* 什么都不做：丢弃字节（接口 ID 不匹配） */
+				PORTA |= BIT5;  // 调试：设置丢弃字节指示 LED
 			}
 		}
 	}
 
-	/* If the TX interrupt is enabled check the register empty flag. */
+	/* 如果发送中断已启用，检查寄存器空标志。 */
 	if((SCI0CR2 & SCICR2_TX_ISR_ENABLE) && (flags & SCISR1_TX_REGISTER_EMPTY)){
-		/* Get the byte to be sent from the buffer */
+		/* 从缓冲区获取要发送的字节 */
 		unsigned char rawValue = *TXBufferCurrentPositionSCI0;
 
 		if(TXPacketLengthToSendSCI0 > 0){
+			// 如果当前没有待发送的转义字节
 			if(TXByteEscaped == 0){
-				/* If the raw value needs to be escaped */
+				/* 如果原始值需要转义 */
 				if(rawValue == ESCAPE_BYTE){
-					SCI0DRL = ESCAPE_BYTE;
-					TXByteEscaped = ESCAPED_ESCAPE_BYTE;
+					SCI0DRL = ESCAPE_BYTE;  // 先发送转义字节
+					TXByteEscaped = ESCAPED_ESCAPE_BYTE;  // 标记下一个字节是转义的转义字节
 				}else if(rawValue == START_BYTE){
-					SCI0DRL = ESCAPE_BYTE;
-					TXByteEscaped = ESCAPED_START_BYTE;
+					SCI0DRL = ESCAPE_BYTE;  // 先发送转义字节
+					TXByteEscaped = ESCAPED_START_BYTE;  // 标记下一个字节是转义的起始字节
 				}else if(rawValue == STOP_BYTE){
-					SCI0DRL = ESCAPE_BYTE;
-					TXByteEscaped = ESCAPED_STOP_BYTE;
-				}else{ /* Otherwise just send it */
-					sendAndIncrement(rawValue);
+					SCI0DRL = ESCAPE_BYTE;  // 先发送转义字节
+					TXByteEscaped = ESCAPED_STOP_BYTE;  // 标记下一个字节是转义的停止字节
+				}else{ /* 否则直接发送它 */
+					sendAndIncrement(rawValue);  // 发送字节并更新指针和长度
 				}
 			}else{
-				sendAndIncrement(TXByteEscaped);
-				TXByteEscaped = 0;
+				// 发送转义的字节（第二个字节）
+				sendAndIncrement(TXByteEscaped);  // 发送转义后的字节
+				TXByteEscaped = 0;  // 清除转义标志
 			}
-		}else{ /* Length is zero */
-			/* Turn off transmission interrupt */
-			SCI0CR2 &= SCICR2_TX_ISR_DISABLE;
-			/* Send the stop byte */
-			SCI0DRL = STOP_BYTE;
-			while(!(SCI0SR1 & 0x80)){/* Wait for ever until able to send then move on */}
-			SCI0DRL = STOP_BYTE; // nasty hack that works... means at least one and most 2 stops are sent so stuff works, but is messy... there must be a better way.
-			/* Clear the TX in progress flag */
-//			TXBufferInUseFlags &= COM_CLEAR_SCI0_INTERFACE_ID;
+		}else{ /* 长度为 0（数据包发送完成） */
+			/* 关闭发送中断 */
+			SCI0CR2 &= SCICR2_TX_ISR_DISABLE;  // 禁用发送中断
+			/* 发送停止字节 */
+			SCI0DRL = STOP_BYTE;  // 发送第一个停止字节
+			while(!(SCI0SR1 & 0x80)){/* 等待直到能够发送然后继续 */}
+			SCI0DRL = STOP_BYTE; // 发送第二个停止字节（临时解决方案，确保至少发送一个，最多两个停止字节，这样能工作，但很混乱...必须有更好的方法）
+			/* 清除发送进行中标志 */
+//			TXBufferInUseFlags &= COM_CLEAR_SCI0_INTERFACE_ID;  // 已注释
 		}
 	}
 
-	/* Record how long the operation took */
-	RuntimeVars.serialISRRuntime = TCNT - start;
+	/* 记录操作花费的时间（用于性能测量） */
+	RuntimeVars.serialISRRuntime = TCNT - start;  // 计算 ISR 执行时间
 }

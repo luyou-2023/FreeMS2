@@ -42,99 +42,100 @@
 #include "inc/derivedVarsGenerator.h"
 
 
-/** @brief Generate the derived variables.
+/** @brief 生成派生变量
  *
- * This function uses the core variables to lookup and calculate further second
- * order variables such as load, VE, Lamdda, Transient fuel correction, engine
- * temperature enrichment, Injector dead time, etc.
+ * 此函数使用核心变量查找和计算进一步的二阶变量，如负荷、VE、Lambda、
+ * 瞬态燃油修正、发动机温度修正、喷油器死区时间等。
  *
  * @author Fred Cooke
+ * 
+ * @note 当前整个函数被注释掉，待实现
  */
 //void generateDerivedVars(){
-//	/*&&&&&&&&&&&&&&&&&&&& Use basic variables to lookup and calculate derived variables &&&&&&&&&&&&&&&&&&&*/
+//	/*&&&&&&&&&&&&&&&&&&&& 使用基本变量查找和计算派生变量 &&&&&&&&&&&&&&&&&&&*/
 //
 //
-//	/* Determine load based on options */
-//	if(TRUE){ /* Use MAP as load */
-//		DerivedVars->LoadMain = CoreVars->MAP;
-//	}else if(FALSE){ /* Use TPS as load */
-//		DerivedVars->LoadMain = CoreVars->TPS;
-//	}else if(FALSE){ /* Use AAP corrected MAP as load */
-//		DerivedVars->LoadMain = ((unsigned long)CoreVars->MAP * CoreVars->AAP) / seaLevelKPa;
-//	}else{ /* Default to MAP, but throw error */
-//		DerivedVars->LoadMain = CoreVars->MAP;
-//		/* If anyone is listening, let them know something is wrong */
-//		sendErrorIfClear(LOAD_NOT_CONFIGURED_CODE); // or maybe queue it?
+//	/* 根据选项确定负荷 */
+//	if(TRUE){ /* 使用 MAP 作为负荷 */
+//		DerivedVars->LoadMain = CoreVars->MAP;  // 直接使用 MAP 作为负荷
+//	}else if(FALSE){ /* 使用 TPS 作为负荷 */
+//		DerivedVars->LoadMain = CoreVars->TPS;  // 使用 TPS 作为负荷
+//	}else if(FALSE){ /* 使用 AAP 修正的 MAP 作为负荷 */
+//		DerivedVars->LoadMain = ((unsigned long)CoreVars->MAP * CoreVars->AAP) / seaLevelKPa;  // MAP 乘以大气压力比海平面压力
+//	}else{ /* 默认使用 MAP，但抛出错误 */
+//		DerivedVars->LoadMain = CoreVars->MAP;  // 默认使用 MAP
+//		/* 如果有人监听，让他们知道出了问题 */
+//		sendErrorIfClear(LOAD_NOT_CONFIGURED_CODE); // 或者可能排队？
 //	}
 //
 //
-//	/* Look up VE with RPM and Load */
+//	/* 使用 RPM 和 Load 查找 VE（容积效率） */
 //	DerivedVars->VEMain = lookupPagedMainTableCellValue((mainTable*)&TablesA.VETableMain, CoreVars->RPM, DerivedVars->LoadMain, currentFuelRPage);
 //
 //
-//	/* Look up target Lambda with RPM and Load */
+//	/* 使用 RPM 和 Load 查找目标 Lambda（空燃比） */
 //	DerivedVars->Lambda = lookupPagedMainTableCellValue((mainTable*)&TablesD.LambdaTable, CoreVars->RPM, DerivedVars->LoadMain, currentFuelRPage);
 //
 //
-//	/* Look up injector dead time with battery voltage */
+//	/* 使用电池电压查找喷油器死区时间 */
 //	DerivedVars->IDT = lookupTwoDTableUS((twoDTableUS*)&TablesA.SmallTablesA.injectorDeadTimeTable, CoreVars->BRV);
 //
 //
-//	/* Look up the engine temperature enrichment percentage with temperature */
+//	/* 使用温度查找发动机温度修正百分比 */
 //	DerivedVars->ETE = lookupTwoDTableUS((twoDTableUS*)&TablesA.SmallTablesA.engineTempEnrichmentTablePercent, CoreVars->CHT);
-//	/* TODO The above needs some careful thought put into it around different loads and correction effects. */
+//	/* TODO 上述内容需要仔细考虑不同负荷和修正效果。 */
 //
 //
-//	/* Calculate the Transient Fuel Correction */
-//	if(TRUE /*WWTFC*/){ /* Do ONLY WW correction if enabled */
-//		// Do ww stuff, maybe pre done via RTC/RTI for consistent period?
-//		DerivedVars->TFCTotal = 0; /* TODO replace with real code */
-//	}else if(FALSE /*STDTFC*/){ /* Do any combination of standard approximate methods */
-//		/* Initialse the variable as a base */
+//	/* 计算瞬态燃油修正 */
+//	if(TRUE /*WWTFC*/){ /* 如果启用，仅进行 WW 修正 */
+//		// 执行 WW 相关操作，可能通过 RTC/RTI 预先完成以获得一致周期？
+//		DerivedVars->TFCTotal = 0; /* TODO 替换为真实代码 */
+//	}else if(FALSE /*STDTFC*/){ /* 执行任何标准近似方法的组合 */
+//		/* 将变量初始化为基值 */
 //		DerivedVars->TFCTotal = 0;
-//		/* Based on the rate of change of MAP and some history/taper time */
+//		/* 基于 MAP 的变化率和一些历史/衰减时间 */
 //		if(FALSE /*MAPTFC*/){
-//			// Do MAP based
+//			// 执行基于 MAP 的修正
 //			DerivedVars->TFCTotal += 0;
 //		}
 //
-//		/* Based on the rate of change of TPS and some history/taper time */
+//		/* 基于 TPS 的变化率和一些历史/衰减时间 */
 //		if(FALSE /*TPSTFC*/){
-//			// Do TPS based
+//			// 执行基于 TPS 的修正
 //			DerivedVars->TFCTotal += 0;
 //		}
 //
-//		/* Based on the rate of change of RPM and some history/taper time */
+//		/* 基于 RPM 的变化率和一些历史/衰减时间 */
 //		if(FALSE /*RPMTFC*/){
-//			// Do RPM based
+//			// 执行基于 RPM 的修正
 //			DerivedVars->TFCTotal += 0;
 //		}
-//	}else{ /* Default to no correction */
+//	}else{ /* 默认不修正 */
 //		DerivedVars->TFCTotal = 0;
-//		/* Don't throw error as correction may not be required */
+//		/* 不抛出错误，因为可能不需要修正 */
 //	}
 //
-//	// debug
+//	// 调试代码
 //
-//	LongTime breakout2, breakout4;
-////	breakout.timeLong = timeBetweenSuccessivePrimaryPulsesBuffer;
-//	breakout2.timeLong = timeBetweenSuccessivePrimaryPulses;
-////	breakout3.timeLong = lengthOfSecondaryHighPulses;
-//	breakout4.timeLong = lengthOfSecondaryLowPulses;
+//	LongTime breakout2, breakout4;  // 用于调试的时间变量
+////	breakout.timeLong = timeBetweenSuccessivePrimaryPulsesBuffer;  // 已注释
+//	breakout2.timeLong = timeBetweenSuccessivePrimaryPulses;  // 连续主脉冲之间的时间
+////	breakout3.timeLong = lengthOfSecondaryHighPulses;  // 已注释
+//	breakout4.timeLong = lengthOfSecondaryLowPulses;  // 次脉冲低电平长度
 //
-////	DerivedVars->sp1 = Counters.primaryTeethSeen;
-////	DerivedVars->sp2 = Counters.secondaryTeethSeen;
+////	DerivedVars->sp1 = Counters.primaryTeethSeen;  // 已注释：主齿计数
+////	DerivedVars->sp2 = Counters.secondaryTeethSeen;  // 已注释：次齿计数
 //
-////	DerivedVars->sp3 = breakout4.timeShorts[0];
-//	DerivedVars->sp1 = breakout4.timeShorts[1];
+////	DerivedVars->sp3 = breakout4.timeShorts[0];  // 已注释
+//	DerivedVars->sp1 = breakout4.timeShorts[1];  // 调试：存储次脉冲低电平长度的高位
 //
-////	DerivedVars->TFCTotal = *RPMRecord;
+////	DerivedVars->TFCTotal = *RPMRecord;  // 已注释：调试用
 //
-////	CoreVars->DMAP = breakout3.timeShorts[0];
-////	CoreVars->DTPS = breakout3.timeShorts[1];
+////	CoreVars->DMAP = breakout3.timeShorts[0];  // 已注释：MAP 变化率
+////	CoreVars->DTPS = breakout3.timeShorts[1];  // 已注释：TPS 变化率
 //
-//	CoreVars->DRPM = breakout2.timeShorts[0];
-//	CoreVars->DDRPM = breakout2.timeShorts[1];
+//	CoreVars->DRPM = breakout2.timeShorts[0];  // 调试：RPM 变化率（高位）
+//	CoreVars->DDRPM = breakout2.timeShorts[1];  // 调试：RPM 变化率（低位）
 //
 //	/*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
 //}

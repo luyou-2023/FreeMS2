@@ -53,10 +53,11 @@
  * @param addend2
  */
 unsigned short safeAdd(unsigned short addend1, unsigned short addend2){
+	// 检查加法是否会溢出：如果 (最大值 - 加数1) > 加数2，则不会溢出
 	if((SHORTMAX - addend1) > addend2){
-		return addend1 + addend2;
+		return addend1 + addend2;  // 安全，返回正常和
 	}else{
-		return SHORTMAX;
+		return SHORTMAX;  // 溢出，返回最大值
 	}
 }
 
@@ -71,20 +72,24 @@ unsigned short safeAdd(unsigned short addend1, unsigned short addend2){
  * @param addend2
  */
 unsigned short safeTrim(unsigned short addend1, signed short addend2){
-
+	// 处理负数修正（减法）
 	if(addend2 < 0){
+		// 检查下溢：如果被减数大于减数的绝对值，则不会下溢
 		if(addend1 > -addend2){
-			return addend1 + addend2;
+			return addend1 + addend2;  // 安全，返回差值（注意 addend2 是负数）
 		}else{
-			return 0;
+			return 0;  // 下溢，返回最小值 0
 		}
 	}else if(addend2 > 0){
+		// 处理正数修正（加法）
+		// 检查溢出：如果修正值小于 (最大值 - 被加数)，则不会溢出
 		if(addend2 < (SHORTMAX - addend1)){
-			return addend1 + addend2;
+			return addend1 + addend2;  // 安全，返回和
 		}else{
-			return SHORTMAX;
+			return SHORTMAX;  // 溢出，返回最大值
 		}
 	}else{
+		// 修正值为 0，直接返回原值
 		return addend1;
 	}
 }
@@ -102,15 +107,19 @@ unsigned short safeTrim(unsigned short addend1, signed short addend2){
  * @param scaler
  */
 unsigned short safeScale(unsigned short baseValue, unsigned short scaler){
-	/* Perform the scaling */
+	/* 执行缩放计算：baseValue * scaler / 0x8000
+	 * scaler: 0x8000 = 100%, 0 = 0%, 0xFFFF = 200%
+	 * 使用 32 位中间结果避免溢出 */
 	unsigned short scaled = ((unsigned long)baseValue * scaler) / SHORTHALF;
 
-	/* If the trim is greater than 100% then the trimmedPW MUST be larger */
-	/* If it's less than 100% it can't have overflowed */		 /* If it's not larger, it overflowed */
+	/* 溢出检测：
+	 * 如果缩放因子大于 100% (SHORTHALF)，则缩放后的值必须大于原值
+	 * 如果缩放因子小于 100%，则不可能溢出
+	 * 如果缩放因子大于 100% 但缩放后的值小于原值，说明发生了溢出 */
 	if((scaler > SHORTHALF) && (baseValue > scaled)){
-		return SHORTMAX;
+		return SHORTMAX;  // 溢出，返回最大值
 	}else{
-		return scaled;
+		return scaled;  // 正常，返回缩放后的值
 	}
 }
 
@@ -149,19 +158,20 @@ unsigned short safeScale(unsigned short baseValue, unsigned short scaler){
  * @author Fred Cooke
  */
 void resetToNonRunningState(){
-	/* Reset RPM to zero */
-	RPM0 = 0;
-	RPM1 = 0;
+	/* 将 RPM 重置为零 */
+	RPM0 = 0;  // 重置 RPM 缓冲区 0
+	RPM1 = 0;  // 重置 RPM 缓冲区 1
 
-	/* Ensure tacho reads lowest possible value */
+	/* 确保转速表读取最低可能值
+	 * 将发动机周期设置为 1 RPM 对应的周期值（最大值） */
 	engineCyclePeriod = ticksPerCycleAtOneRPM;
 
-	/* Clear all sync flags to lost state */
-	//coreStatusA &= CLEAR_RPM_VALID;
-	coreStatusA &= CLEAR_PRIMARY_SYNC;
-	//coreStatusA &= CLEAR_SECONDARY_SYNC;
+	/* 清除所有同步标志，设置为丢失同步状态 */
+	//coreStatusA &= CLEAR_RPM_VALID;  // 已注释：清除 RPM 有效标志
+	coreStatusA &= CLEAR_PRIMARY_SYNC;  // 清除主同步标志
+	//coreStatusA &= CLEAR_SECONDARY_SYNC;  // 已注释：清除次同步标志
 
-	// TODO more stuff needs resetting here, but only critical things.
+	// TODO 这里还需要重置更多内容，但只重置关键内容
 }
 
 
@@ -172,12 +182,19 @@ void resetToNonRunningState(){
  * @author Fred Cooke
  */
 void adjustPWM(){
-	PWMDTY0 = ATD0DR0 >> 2; // scale raw adc to a duty
-	PWMDTY1 = ATD0DR1 >> 2; // scale raw adc to a duty
-	PWMDTY2 = ATD0DR2 >> 2; // scale raw adc to a duty
-	PWMDTY3 = ATD0DR3 >> 2; // scale raw adc to a duty
-	PWMDTY4 = ATD0DR4 >> 2; // scale raw adc to a duty
-	PWMDTY5 = ATD0DR5 >> 2; // scale raw adc to a duty
+	// 将原始 ADC 值缩放到占空比（右移 2 位，相当于除以 4）
+	// 通道 0: 将 ADC 通道 0 的值转换为 PWM 通道 0 的占空比
+	PWMDTY0 = ATD0DR0 >> 2; // 缩放原始 ADC 到占空比
+	// 通道 1: 将 ADC 通道 1 的值转换为 PWM 通道 1 的占空比
+	PWMDTY1 = ATD0DR1 >> 2; // 缩放原始 ADC 到占空比
+	// 通道 2: 将 ADC 通道 2 的值转换为 PWM 通道 2 的占空比
+	PWMDTY2 = ATD0DR2 >> 2; // 缩放原始 ADC 到占空比
+	// 通道 3: 将 ADC 通道 3 的值转换为 PWM 通道 3 的占空比
+	PWMDTY3 = ATD0DR3 >> 2; // 缩放原始 ADC 到占空比
+	// 通道 4: 将 ADC 通道 4 的值转换为 PWM 通道 4 的占空比
+	PWMDTY4 = ATD0DR4 >> 2; // 缩放原始 ADC 到占空比
+	// 通道 5: 将 ADC 通道 5 的值转换为 PWM 通道 5 的占空比
+	PWMDTY5 = ATD0DR5 >> 2; // 缩放原始 ADC 到占空比
 }
 
 
@@ -190,15 +207,16 @@ void adjustPWM(){
  * @param Arrays a pointer to an ADCArray struct to store ADC values in.
  */
 void sampleEachADC(ADCArray *Arrays){
-	/* ATD0 */
-	Arrays->IAT = ATD0DR0;
-	Arrays->CHT = ATD0DR1;
-	Arrays->TPS = ATD0DR2;
-	Arrays->EGO = ATD0DR3;
-	Arrays->MAP = ATD0DR4;
-	Arrays->AAP = ATD0DR5;
-	Arrays->BRV = ATD0DR6;
-	Arrays->MAT = ATD0DR7;
+	/* 读取 ATD0 模块的所有 ADC 通道
+	 * 按名称逐个读取，确保数据一致性 */
+	Arrays->IAT = ATD0DR0;  // 通道 0: 进气温度 (IAT)
+	Arrays->CHT = ATD0DR1;  // 通道 1: 缸盖温度 (CHT)
+	Arrays->TPS = ATD0DR2;  // 通道 2: 节气门位置 (TPS)
+	Arrays->EGO = ATD0DR3;  // 通道 3: 氧传感器 (EGO)
+	Arrays->MAP = ATD0DR4;  // 通道 4: 歧管压力 (MAP)
+	Arrays->AAP = ATD0DR5;  // 通道 5: 大气压力 (AAP)
+	Arrays->BRV = ATD0DR6;  // 通道 6: 电池电压 (BRV)
+	Arrays->MAT = ATD0DR7;  // 通道 7: 歧管温度 (MAT)
 }
 
 
@@ -211,16 +229,20 @@ void sampleEachADC(ADCArray *Arrays){
  * @param Arrays a pointer to an ADCArray struct to store ADC values in.
  */
 void sampleLoopADC(ADCArray *Arrays){
-	// get the address of the ADC array
+	// 获取 ADC 数组的地址
 	unsigned short addr = (unsigned short)Arrays;
 
-	//sendUS(addr);
+	//sendUS(addr);  // 已注释：调试输出
 	unsigned char loop;
-	/* (value of((address of ADCArrays struct) + (offset to start of bank(0 or half struct length)) + (offset to particular ADC (loopcounter * 4)) + (offset to correct element(0 or 2)))) =
-	 * (value of((address of ARRAY block) + (loop counter * 2))) */
+	/* 地址计算说明：
+	 * (ADCArrays 结构体地址 + 缓冲区偏移(0 或结构体长度的一半) + 
+	 *  特定 ADC 偏移(循环计数器 * 4) + 元素偏移(0 或 2)) =
+	 * (ARRAY 块地址 + 循环计数器 * 2) */
 
+	// 循环读取 8 个通道（每次读取 2 字节，共 16 字节）
 	for(loop=0;loop<16;loop += 2){
-		/* Do the first block */
+		/* 读取第一个块（ATD0）
+		 * 使用指针直接访问：将 ATD0 寄存器值复制到数组 */
 		DVUSP(addr + loop) = DVUSP(ATD0_BASE + loop);
 	}
 }
@@ -253,8 +275,11 @@ void sampleBlockADC(ADCArray *Arrays){
  */
 void sleep(unsigned short ms){
 	unsigned short j, k;
+	// 外层循环：毫秒数
 	for(j=0;j<ms;j++){
+		// 内层循环：每个毫秒的延迟循环（约 5714 次，根据时钟频率调整）
 		for(k=0;k<5714;k++){
+			// 空循环，消耗 CPU 时间
 		}
 	}
 }
@@ -272,8 +297,11 @@ void sleep(unsigned short ms){
  */
 void sleepMicro(unsigned short us){
 	unsigned short j, k;
+	// 外层循环：微秒数
 	for(j=0;j<us;j++){
+		// 内层循环：每个微秒的延迟循环（约 6 次，非常近似）
 		for(k=0;k<6;k++){
+			// 空循环，消耗 CPU 时间
 		}
 	}
 }
@@ -291,11 +319,12 @@ void sleepMicro(unsigned short us){
  * @return a simple additive checksum.
  */
 unsigned char checksum(unsigned char *block, unsigned short length){
-	unsigned char sum = 0;
+	unsigned char sum = 0;  // 初始化校验和为 0
+	// 遍历数据块，累加所有字节
 	while (length-- > 0){
-		sum += *block++;
+		sum += *block++;  // 累加当前字节，然后指针递增
 	}
-	return sum;
+	return sum;  // 返回简单累加校验和
 }
 
 
@@ -311,12 +340,13 @@ unsigned char checksum(unsigned char *block, unsigned short length){
  * @return the length of the string copied.
  */
 unsigned short stringCopy(unsigned char* dest, unsigned char* source){
-	short length = -1;
+	short length = -1;  // 初始化为 -1，因为会在复制前递增
+	// 使用 do-while 循环，确保至少执行一次（即使源字符串为空）
 	do {
-		*dest++ = *source++;
-		length++;
-	} while(*(source-1) != 0);
-	return (unsigned short) length;
+		*dest++ = *source++;  // 复制当前字符，两个指针都递增
+		length++;  // 长度递增
+	} while(*(source-1) != 0);  // 检查刚复制的字符是否为字符串结束符 '\0'
+	return (unsigned short) length;  // 返回复制的字符串长度（不包括结束符）
 }
 
 /**
@@ -326,10 +356,12 @@ unsigned short stringCopy(unsigned char* dest, unsigned char* source){
  */
 unsigned short compare(unsigned char* original, unsigned char* toCheck, unsigned short length){
 	unsigned short i;
+	// 逐字节比较两个内存块
 	for(i=0;i<length;i++){
+		// 如果发现不匹配的字节
 		if(original[i] != toCheck[i]){
-			return i + 1; // zero = success
+			return i + 1; // 返回基于 1 的索引（失败位置），0 表示成功
 		}
 	}
-	return 0;
+	return 0;  // 所有字节都匹配，返回 0 表示成功
 }

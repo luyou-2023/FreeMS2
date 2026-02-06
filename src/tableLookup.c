@@ -111,27 +111,31 @@ signed char lookup8Bit3D( */
  */
 unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short realRPM, unsigned short realLoad, unsigned char RAMPage){
 
-	/* Save the RPAGE value for restoration and switch pages. */
-//	unsigned char oldRPage = RPAGE;
-//	RPAGE = RAMPage;
+	/* 保存 RPAGE 值以便恢复并切换页面。 */
+//	unsigned char oldRPage = RPAGE;  // 已注释：保存旧页面
+//	RPAGE = RAMPage;  // 已注释：切换到目标页面
 
-	/* Find the bounding axis values and indices for RPM */
-	unsigned char lowRPMIndex = 0;
-	unsigned char highRPMIndex = Table->RPMLength - 1;
-	/* If never set in the loop, low value will equal high value and will be on the edge of the map */
-	unsigned short lowRPMValue = Table->RPM[0];
-	unsigned short highRPMValue = Table->RPM[Table->RPMLength -1];
+	/* 查找 RPM 轴的边界值和索引 */
+	unsigned char lowRPMIndex = 0;  // 低 RPM 索引，初始化为 0
+	unsigned char highRPMIndex = Table->RPMLength - 1;  // 高 RPM 索引，初始化为最后一个
+	/* 如果在循环中从未设置，低值将等于高值，将在映射的边缘 */
+	unsigned short lowRPMValue = Table->RPM[0];  // 低 RPM 值，初始化为第一个值
+	unsigned short highRPMValue = Table->RPM[Table->RPMLength -1];  // 高 RPM 值，初始化为最后一个值
 
 	unsigned char RPMIndex;
+	// 遍历 RPM 轴，查找包含 realRPM 的区间
 	for(RPMIndex=0;RPMIndex<Table->RPMLength;RPMIndex++){
 		if(Table->RPM[RPMIndex] < realRPM){
+			// 当前值小于目标值，更新低边界
 			lowRPMValue = Table->RPM[RPMIndex];
 			lowRPMIndex = RPMIndex;
 		}else if(Table->RPM[RPMIndex] > realRPM){
+			// 当前值大于目标值，找到高边界，退出循环
 			highRPMValue = Table->RPM[RPMIndex];
 			highRPMIndex = RPMIndex;
 			break;
 		}else if(Table->RPM[RPMIndex] == realRPM){
+			// 精确匹配，无需插值
 			lowRPMValue = Table->RPM[RPMIndex];
 			highRPMValue = Table->RPM[RPMIndex];
 			lowRPMIndex = RPMIndex;
@@ -140,23 +144,27 @@ unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short re
 		}
 	}
 
-	/* Find the bounding cell values and indices for Load */
-	unsigned char lowLoadIndex = 0;
-	unsigned char highLoadIndex = Table->LoadLength -1;
-	/* If never set in the loop, low value will equal high value and will be on the edge of the map */
-	unsigned short lowLoadValue = Table->Load[0];
-	unsigned short highLoadValue = Table->Load[Table->LoadLength -1];
+	/* 查找 Load 轴的边界值和索引 */
+	unsigned char lowLoadIndex = 0;  // 低 Load 索引，初始化为 0
+	unsigned char highLoadIndex = Table->LoadLength -1;  // 高 Load 索引，初始化为最后一个
+	/* 如果在循环中从未设置，低值将等于高值，将在映射的边缘 */
+	unsigned short lowLoadValue = Table->Load[0];  // 低 Load 值，初始化为第一个值
+	unsigned short highLoadValue = Table->Load[Table->LoadLength -1];  // 高 Load 值，初始化为最后一个值
 
 	unsigned char LoadIndex;
+	// 遍历 Load 轴，查找包含 realLoad 的区间
 	for(LoadIndex=0;LoadIndex<Table->LoadLength;LoadIndex++){
 		if(Table->Load[LoadIndex] < realLoad){
+			// 当前值小于目标值，更新低边界
 			lowLoadValue = Table->Load[LoadIndex];
 			lowLoadIndex = LoadIndex;
 		}else if(Table->Load[LoadIndex] > realLoad){
+			// 当前值大于目标值，找到高边界，退出循环
 			highLoadValue = Table->Load[LoadIndex];
 			highLoadIndex = LoadIndex;
 			break;
 		}else if(Table->Load[LoadIndex] == realLoad){
+			// 精确匹配，无需插值
 			lowLoadValue = Table->Load[LoadIndex];
 			highLoadValue = Table->Load[LoadIndex];
 			lowLoadIndex = LoadIndex;
@@ -165,20 +173,24 @@ unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short re
 		}
 	}
 
-	/* Obtain the four corners surrounding the spot of interest */
-	unsigned short lowRPMLowLoad = Table->Table[(Table->LoadLength * lowRPMIndex) + lowLoadIndex];
-	unsigned short lowRPMHighLoad = Table->Table[(Table->LoadLength * lowRPMIndex) + highLoadIndex];
-	unsigned short highRPMLowLoad = Table->Table[(Table->LoadLength * highRPMIndex) + lowLoadIndex];
-	unsigned short highRPMHighLoad = Table->Table[(Table->LoadLength * highRPMIndex) + highLoadIndex];
+	/* 获取围绕目标点的四个角的值
+	 * 表格布局：Table[LoadLength * RPMIndex + LoadIndex] */
+	unsigned short lowRPMLowLoad = Table->Table[(Table->LoadLength * lowRPMIndex) + lowLoadIndex];  // 左下角
+	unsigned short lowRPMHighLoad = Table->Table[(Table->LoadLength * lowRPMIndex) + highLoadIndex];  // 左上角
+	unsigned short highRPMLowLoad = Table->Table[(Table->LoadLength * highRPMIndex) + lowLoadIndex];  // 右下角
+	unsigned short highRPMHighLoad = Table->Table[(Table->LoadLength * highRPMIndex) + highLoadIndex];  // 右上角
 
-	/* Restore the RAM page before doing the math */
-//	RPAGE = oldRPage;
+	/* 在进行数学计算之前恢复 RAM 页面 */
+//	RPAGE = oldRPage;  // 已注释：恢复旧页面
 
-	/* Find the two side values to interpolate between by interpolation */
+	/* 通过在 Load 方向插值找到两个边值
+	 * 在低 RPM 行插值：从 lowRPMLowLoad 到 lowRPMHighLoad */
 	unsigned short lowRPMIntLoad = lowRPMLowLoad + (((signed long)((signed long)lowRPMHighLoad - lowRPMLowLoad) * (realLoad - lowLoadValue))/ (highLoadValue - lowLoadValue));
+	/* 在高 RPM 行插值：从 highRPMLowLoad 到 highRPMHighLoad */
 	unsigned short highRPMIntLoad = highRPMLowLoad + (((signed long)((signed long)highRPMHighLoad - highRPMLowLoad) * (realLoad - lowLoadValue))/ (highLoadValue - lowLoadValue));
 
-	/* Interpolate between the two side values and return the result */
+	/* 在两个边值之间插值（RPM 方向）并返回结果
+	 * 从 lowRPMIntLoad 到 highRPMIntLoad */
 	return lowRPMIntLoad + (((signed long)((signed long)highRPMIntLoad - lowRPMIntLoad) * (realRPM - lowRPMValue))/ (highRPMValue - lowRPMValue));
 }
 
@@ -196,33 +208,37 @@ unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short re
  */
 unsigned short lookupTwoDTableUS(twoDTableUS * Table, unsigned short Value){
 
-	/* Find the bounding axis indices, axis values and lookup values */
-	unsigned char lowIndex = 0;
-	unsigned char highIndex = 15;
-	/* If never set in the loop, low value will equal high value and will be on the edge of the map */
-	unsigned short lowAxisValue = Table->Axis[0];
-	unsigned short highAxisValue = Table->Axis[15];
-	unsigned short lowLookupValue = Table->Values[0];
-	unsigned short highLookupValue = Table->Values[15];
+	/* 查找边界轴索引、轴值和查找值 */
+	unsigned char lowIndex = 0;  // 低索引，初始化为 0
+	unsigned char highIndex = 15;  // 高索引，初始化为 15（固定长度）
+	/* 如果在循环中从未设置，低值将等于高值，将在映射的边缘 */
+	unsigned short lowAxisValue = Table->Axis[0];  // 低轴值，初始化为第一个值
+	unsigned short highAxisValue = Table->Axis[15];  // 高轴值，初始化为最后一个值
+	unsigned short lowLookupValue = Table->Values[0];  // 低查找值，初始化为第一个值
+	unsigned short highLookupValue = Table->Values[15];  // 高查找值，初始化为最后一个值
 
 	unsigned char Index;
+	// 遍历轴数组，查找包含 Value 的区间
 	for(Index=0;Index<16;Index++){
 		if(Table->Axis[Index] < Value){
+			// 当前值小于目标值，更新低边界
 			lowIndex = Index;
 			lowAxisValue = Table->Axis[Index];
 			lowLookupValue = Table->Values[Index];
 		}else if(Table->Axis[Index] > Value){
+			// 当前值大于目标值，找到高边界，退出循环
 			highIndex = Index;
 			highAxisValue = Table->Axis[Index];
 			highLookupValue = Table->Values[Index];
 			break;
 		}else if(Table->Axis[Index] == Value){
-			return Table->Values[Index]; // If right on, just return the value
+			return Table->Values[Index]; // 如果正好匹配，直接返回值（无需插值）
 		}
 	}
 
 
-	/* Interpolate and return the value */
+	/* 插值并返回值
+	 * 线性插值：lowLookupValue + (比例 * 差值) */
 	return lowLookupValue + (((signed long)((signed long)highLookupValue - lowLookupValue) * (Value - lowAxisValue))/ (highAxisValue - lowAxisValue));
 }
 
@@ -243,26 +259,28 @@ unsigned short lookupTwoDTableUS(twoDTableUS * Table, unsigned short Value){
  * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short setAxisValue(unsigned short index, unsigned short value, unsigned short axis[], unsigned short length, unsigned short errorBase){
+	// 检查索引是否超出范围
 	if(index >= length){
-		return errorBase + invalidAxisIndex;
+		return errorBase + invalidAxisIndex;  // 返回错误：无效的轴索引
 	}else{
+		// 检查轴值顺序（必须递增）
 		if(index > 0){
-			/* Ensure value isn't lower than the one below */
+			/* 确保值不小于前一个值 */
 			if(axis[index - 1] > value){
-				return errorBase + invalidAxisOrder;
+				return errorBase + invalidAxisOrder;  // 返回错误：轴顺序无效（小于前一个值）
 			}
 		}
 		if(index < (length -1)){
-			/* Ensure value isn't higher than the one above */
+			/* 确保值不大于后一个值 */
 			if(value > axis[index + 1]){
-				return errorBase + invalidAxisOrder;
+				return errorBase + invalidAxisOrder;  // 返回错误：轴顺序无效（大于后一个值）
 			}
 		}
 	}
 
-	/* If we got this far all is well, set the value */
-	axis[index] = value;
-	return 0;
+	/* 如果通过了所有检查，设置值 */
+	axis[index] = value;  // 设置轴值
+	return 0;  // 返回成功
 }
 
 
@@ -282,20 +300,24 @@ unsigned short setAxisValue(unsigned short index, unsigned short value, unsigned
  * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short setPagedMainTableCellValue(unsigned char RPageValue, mainTable* Table, unsigned short RPMIndex, unsigned short LoadIndex, unsigned short cellValue){
-//	unsigned char oldRPage = RPAGE;
-	unsigned short errorID = 0;
-//	RPAGE = RPageValue;
+//	unsigned char oldRPage = RPAGE;  // 已注释：保存旧页面
+	unsigned short errorID = 0;  // 初始化错误 ID 为 0（成功）
+//	RPAGE = RPageValue;  // 已注释：切换到目标页面
+	// 检查 RPM 索引是否有效
 	if(RPMIndex < Table->RPMLength){
+		// 检查 Load 索引是否有效
 		if(LoadIndex < Table->LoadLength){
+			// 计算表格单元格位置并设置值
+			// 表格布局：Table[LoadLength * RPMIndex + LoadIndex]
 			Table->Table[(Table->LoadLength * RPMIndex) + LoadIndex] = cellValue;
 		}else{
-			errorID = invalidMainTableLoadIndex;
+			errorID = invalidMainTableLoadIndex;  // 返回错误：无效的 Load 索引
 		}
 	}else{
-		errorID = invalidMainTableRPMIndex;
+		errorID = invalidMainTableRPMIndex;  // 返回错误：无效的 RPM 索引
 	}
-//	RPAGE = oldRPage;
-	return errorID;
+//	RPAGE = oldRPage;  // 已注释：恢复旧页面
+	return errorID;  // 返回错误 ID（0 表示成功）
 }
 
 
@@ -407,32 +429,37 @@ unsigned short setPagedTwoDTableAxisValue(unsigned char RPageValue, twoDTableUS*
  * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short validateMainTable(mainTable* Table){
-	/* If required and only if required extend this to take r and f pages and check	*/
-	/* any main table, not just a freshly received untrusted ones in linear space	*/
+	/* 如果需要，扩展此函数以接受 r 和 f 页面并检查
+	 * 任何主表格，而不仅仅是线性空间中刚接收的不受信任的表格 */
 
+	// 检查 RPM 轴长度是否超出最大值
 	if(Table->RPMLength > MAINTABLE_MAX_RPM_LENGTH){
-		return invalidMainTableRPMLength;
+		return invalidMainTableRPMLength;  // 返回错误：RPM 长度无效
 	}else if(Table->LoadLength > MAINTABLE_MAX_LOAD_LENGTH){
-		return invalidMainTableLoadLength;
+		// 检查 Load 轴长度是否超出最大值
+		return invalidMainTableLoadLength;  // 返回错误：Load 长度无效
 	}else if((Table->RPMLength * Table->LoadLength) > MAINTABLE_MAX_MAIN_LENGTH){
-		return invalidMainTableMainLength;
+		// 检查表格总大小是否超出最大值
+		return invalidMainTableMainLength;  // 返回错误：表格总长度无效
 	}else{
-		/* Check the order of the RPM axis */
+		/* 检查 RPM 轴的顺序（必须递增） */
 		unsigned char i;
 		for(i=0;i<(Table->RPMLength - 1);i++){
+			// 如果前一个值大于后一个值，顺序无效
 			if(Table->RPM[i] > Table->RPM[i+1]){
-				return invalidMainTableRPMOrder;
+				return invalidMainTableRPMOrder;  // 返回错误：RPM 轴顺序无效
 			}
 		}
-		/* Check the order of the Load axis */
+		/* 检查 Load 轴的顺序（必须递增） */
 		unsigned char j;
 		for(j=0;j<(Table->LoadLength - 1);j++){
+			// 如果前一个值大于后一个值，顺序无效
 			if(Table->Load[j] > Table->Load[j+1]){
-				return invalidMainTableLoadOrder;
+				return invalidMainTableLoadOrder;  // 返回错误：Load 轴顺序无效
 			}
 		}
-		/* If we made it this far all is well */
-		return 0;
+		/* 如果通过了所有检查，表格有效 */
+		return 0;  // 返回成功
 	}
 }
 
@@ -449,12 +476,13 @@ unsigned short validateMainTable(mainTable* Table){
  * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short validateTwoDTable(twoDTableUS* Table){
-	/* Check the order of the axis */
+	/* 检查轴的顺序（必须递增） */
 	unsigned char i;
 	for(i=0;i<(TWODTABLEUS_LENGTH - 1);i++){
+		// 如果前一个值大于后一个值，顺序无效
 		if(Table->Axis[i] > Table->Axis[i+1]){
-			return invalidTwoDTableAxisOrder;
+			return invalidTwoDTableAxisOrder;  // 返回错误：轴顺序无效
 		}
 	}
-	return 0;
+	return 0;  // 返回成功
 }

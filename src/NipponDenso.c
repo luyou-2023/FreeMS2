@@ -107,51 +107,55 @@ void PrimaryRPMISR(){
 	 * tooth shape, profile and spacing may vary this is the only reliable edge
 	 * for us to schedule from, hence the trailing edge code is very simple.
 	 */
+	// 如果是上升沿（BIT0 = 1）
 	if(PTITCurrentState & 0x01){
-		// increment crank pulses TODO this needs to be wrapped in tooth period and width checking
-		primaryPulsesPerSecondaryPulse++;
+		// 递增曲轴脉冲计数 TODO 这需要包装在齿周期和宽度检查中
+		primaryPulsesPerSecondaryPulse++;  // 增加主脉冲计数（24/2 模式：每转 24 个齿）
 
-		// calculate rough rpm (this will be wrong when the var is used correctly)
-		*RPMRecord = ticksPerCycleAtOneRPMx2 / engineCyclePeriod; /* 0.8us ticks, 150mil = 2 x 60 seconds, times rpm scale factor of 2 */
+		// 计算粗略 RPM（当变量正确使用时这将是错误的）
+		*RPMRecord = ticksPerCycleAtOneRPMx2 / engineCyclePeriod; /* 0.8us 计数, 150mil = 2 x 60 秒, 乘以 RPM 比例因子 2 */
+		// RPM = (每分钟计数 / 2) / 发动机周期
 
-		// don't run until the second trigger has come in and the period is correct (VERY temporary)
+		// 在第二个触发器到达且周期正确之前不运行（非常临时）
 		if(!(coreStatusA & PRIMARY_SYNC)){
-			primaryTeethDroppedFromLackOfSync++;
-			return;
+			primaryTeethDroppedFromLackOfSync++;  // 增加因缺少同步而丢弃的齿计数
+			return;  // 未同步，退出
 		}
 
-		LongTime timeStamp;
+		LongTime timeStamp;  // 32 位时间戳结构
 
-		/* Install the low word */
-		timeStamp.timeShorts[1] = edgeTimeStamp;
-		/* Find out what our timer value means and put it in the high word */
-		if(TFLGOF && !(edgeTimeStamp & 0x8000)){ /* see 10.3.5 paragraph 4 of 68hc11 ref manual for details */
-			timeStamp.timeShorts[0] = timerExtensionClock + 1;
+		/* 安装低字（16 位） */
+		timeStamp.timeShorts[1] = edgeTimeStamp;  // 低 16 位 = 边沿时间戳
+		/* 找出我们的定时器值的含义并将其放入高字（16 位） */
+		if(TFLGOF && !(edgeTimeStamp & 0x8000)){ /* 参见 68hc11 参考手册 10.3.5 第 4 段了解详细信息 */
+			// 如果定时器溢出且边沿时间戳的高位为 0
+			timeStamp.timeShorts[0] = timerExtensionClock + 1;  // 高 16 位 = 扩展时钟 + 1
 		}else{
-			timeStamp.timeShorts[0] = timerExtensionClock;
+			timeStamp.timeShorts[0] = timerExtensionClock;  // 高 16 位 = 扩展时钟
 		}
 
-		// temporary data from inputs
-		primaryLeadingEdgeTimeStamp = timeStamp.timeLong;
-		timeBetweenSuccessivePrimaryPulses = lastPrimaryPulseTimeStamp - primaryLeadingEdgeTimeStamp;
-		lastPrimaryPulseTimeStamp = primaryLeadingEdgeTimeStamp;
-//		timeBetweenSuccessivePrimaryPulsesBuffer = (timeBetweenSuccessivePrimaryPulses >> 1) + (timeBetweenSuccessivePrimaryPulsesBuffer >> 1);
+		// 来自输入的临时数据
+		primaryLeadingEdgeTimeStamp = timeStamp.timeLong;  // 当前上升沿时间戳
+		timeBetweenSuccessivePrimaryPulses = lastPrimaryPulseTimeStamp - primaryLeadingEdgeTimeStamp;  // 计算连续主脉冲之间的时间
+		lastPrimaryPulseTimeStamp = primaryLeadingEdgeTimeStamp;  // 更新上次脉冲时间戳
+//		timeBetweenSuccessivePrimaryPulsesBuffer = (timeBetweenSuccessivePrimaryPulses >> 1) + (timeBetweenSuccessivePrimaryPulsesBuffer >> 1);  // 已注释：缓冲计算
 
-		// TODO make scheduling either fixed from boot with a limited range, OR preferrably if its practical scheduled on the fly to allow arbitrary advance and retard of both fuel and ignition.
+		// TODO 使调度要么从启动时固定且范围有限，要么如果实用的话在运行时调度，以允许燃油和点火的任意提前和延迟。
 
-		/* Check for loss of sync by too high a count */
+		/* 通过计数过高检查同步丢失
+		 * 24/2 模式：每转应该有 12 个主脉冲（24 个齿 / 2） */
 		if(primaryPulsesPerSecondaryPulse > 12){
-			/* Increment the lost sync count */
-			Counters.crankSyncLosses++;
+			/* 递增丢失同步计数 */
+			Counters.crankSyncLosses++;  // 增加曲轴同步丢失计数
 
-			/* Clear synced status */
-			coreStatusA &= CLEAR_PRIMARY_SYNC;
+			/* 清除同步状态 */
+			coreStatusA &= CLEAR_PRIMARY_SYNC;  // 清除主同步标志
 
-			/* Reset the count of teeth */
-			primaryPulsesPerSecondaryPulse = 0;
+			/* 重置齿计数 */
+			primaryPulsesPerSecondaryPulse = 0;  // 重置主脉冲计数
 
-			/* Get the hell out of here before we do something bad */
-			return;
+			/* 在我们做坏事之前离开这里 */
+			return;  // 失去同步，退出
 		}
 
 		// CAUTION came to me lying in bed half asleep idea :
@@ -168,71 +172,82 @@ void PrimaryRPMISR(){
 
 		// TODO should make for a clean compact scheduling implementation. the fuel code doesn't care when/how it has started in the past, and hopefully ign will be the same.
 
-		// this will be done with an array and per tooth check in future
+		// 这将在未来通过数组和每齿检查来完成
+		// 每两个主脉冲执行一次（24/2 模式：每转 12 次）
 		if((primaryPulsesPerSecondaryPulse % 2) == 0){
 
-			// TODO sample ADCs on teeth other than that used by the scheduler in order to minimise peak run time and get clean signals
-			sampleEachADC(ADCArrays);
-			Counters.syncedADCreadings++;
-			*mathSampleTimeStampRecord = TCNT;
+			// TODO 在调度器使用的齿以外的齿上采样 ADC，以最小化峰值运行时间并获得干净信号
+			sampleEachADC(ADCArrays);  // 采样所有 ADC 通道
+			Counters.syncedADCreadings++;  // 增加同步 ADC 读取计数
+			*mathSampleTimeStampRecord = TCNT;  // 记录采样时间戳
 
-			/* Set flag to say calc required */
-			coreStatusA |= CALC_FUEL_IGN;
+			/* 设置标志以指示需要计算 */
+			coreStatusA |= CALC_FUEL_IGN;  // 设置计算燃油和点火标志
 
-			/* Reset the clock for reading timeout */
-			Clocks.timeoutADCreadingClock = 0;
+			/* 重置读取超时时钟 */
+			Clocks.timeoutADCreadingClock = 0;  // 重置超时计数器
 
-			if(masterPulseWidth > injectorMinimumPulseWidth){ // use reference PW to decide. spark needs moving outside this area though TODO
-				/* Determine if half the cycle is bigger than short-max */
-				unsigned short maxAngleAfter;
+			// 如果主脉宽大于最小脉宽，调度喷油事件
+			// 使用参考脉宽来决定。火花需要移到此区域外 TODO
+			if(masterPulseWidth > injectorMinimumPulseWidth){
+				/* 确定半个周期是否大于 short 最大值 */
+				unsigned short maxAngleAfter;  // 最大提前角
 				if((engineCyclePeriod >> 1) > 0xFFFF){
-					maxAngleAfter = 0xFFFF;
+					// 如果半个周期超过 16 位最大值
+					maxAngleAfter = 0xFFFF;  // 使用 16 位最大值
 				}else{
-					maxAngleAfter = (unsigned short)(engineCyclePeriod >> 1);
+					maxAngleAfter = (unsigned short)(engineCyclePeriod >> 1);  // 使用半个周期
 				}
 
-				/* Check advance to ensure it is less than 1/2 of the previous engine cycle and more than codetime away */
-				unsigned short advance;
-				if(totalAngleAfterReferenceInjection > maxAngleAfter){ // if too big, make it max
-					advance = maxAngleAfter;
-				}else if(totalAngleAfterReferenceInjection < trailingEdgeSecondaryRPMInputCodeTime){ // if too small, make it min
-					advance = trailingEdgeSecondaryRPMInputCodeTime;
-				}else{ // else use it as is
-					advance = totalAngleAfterReferenceInjection;
+				/* 检查提前角，确保它小于前一个发动机周期的 1/2 且大于代码时间 */
+				unsigned short advance;  // 提前角
+				if(totalAngleAfterReferenceInjection > maxAngleAfter){ // 如果太大，使其为最大值
+					advance = maxAngleAfter;  // 限制为最大值
+				}else if(totalAngleAfterReferenceInjection < trailingEdgeSecondaryRPMInputCodeTime){ // 如果太小，使其为最小值
+					advance = trailingEdgeSecondaryRPMInputCodeTime;  // 限制为最小值
+				}else{ // 否则按原样使用
+					advance = totalAngleAfterReferenceInjection;  // 使用计算出的提前角
 				}
 
-				// determine the long and short start times
-				unsigned short startTime = primaryLeadingEdgeTimeStamp + advance;
-				unsigned long startTimeLong = timeStamp.timeLong + advance;
+				// 确定长和短开始时间
+				unsigned short startTime = primaryLeadingEdgeTimeStamp + advance;  // 16 位开始时间（注意：这里可能有溢出问题）
+				unsigned long startTimeLong = timeStamp.timeLong + advance;  // 32 位开始时间
 
-				/* Determine the channels to schedule */
-				unsigned char fuelChannel = (primaryPulsesPerSecondaryPulse / 2) - 1;
-				unsigned char ignitionChannel = (primaryPulsesPerSecondaryPulse / 2) - 1;
+				/* 确定要调度的通道
+				 * 24/2 模式：每两个主脉冲对应一个气缸
+				 * primaryPulsesPerSecondaryPulse: 2,4,6,8,10,12 对应通道 0,1,2,3,4,5 */
+				unsigned char fuelChannel = (primaryPulsesPerSecondaryPulse / 2) - 1;  // 燃油通道 = (脉冲数 / 2) - 1
+				unsigned char ignitionChannel = (primaryPulsesPerSecondaryPulse / 2) - 1;  // 点火通道 = (脉冲数 / 2) - 1
 
+				// 检查通道号是否有效（最大 5，对应 6 个通道）
 				if(fuelChannel > 5 || ignitionChannel > 5){
-//					send("bad fuel : ");
-	//				sendUC(fuelChannel);
-		//			send("bad  ign : ");
-			//		sendUC(ignitionChannel);
-					return;
+//					send("bad fuel : ");  // 已注释：调试输出
+	//				sendUC(fuelChannel);  // 已注释
+		//			send("bad  ign : ");  // 已注释
+			//		sendUC(ignitionChannel);  // 已注释
+					return;  // 通道号无效，退出
 				}
 
-				// determine whether or not to reschedule
-				unsigned char reschedule = 0;
+				// 确定是否需要重新调度
+				unsigned char reschedule = 0;  // 重新调度标志
+				// 计算时间差：开始时间 - (上次结束时间 + 关闭代码时间)
 				unsigned long diff = startTimeLong - (injectorMainEndTimes[fuelChannel] + injectorSwitchOffCodeTime);
 				if(diff > LONGHALF){
+					// 如果时间差太大（超过 32 位的一半），需要重新调度
 					reschedule = 1;
 				}
 
-				// schedule the appropriate channel
-				if(!(*injectorMainControlRegisters[fuelChannel] & injectorMainEnableMasks[fuelChannel]) || reschedule){ /* If the timer isn't still running, or if its set too long, set it to start again at the right time soon */
-					*injectorMainControlRegisters[fuelChannel] |= injectorMainEnableMasks[fuelChannel];
-					*injectorMainTimeRegisters[fuelChannel] = startTime;
-					TIE |= injectorMainOnMasks[fuelChannel];
-					TFLG = injectorMainOnMasks[fuelChannel];
+				// 调度相应的通道
+				if(!(*injectorMainControlRegisters[fuelChannel] & injectorMainEnableMasks[fuelChannel]) || reschedule){
+					/* 如果定时器没有仍在运行，或者设置的时间太长，将其设置为在正确的时间很快再次开始 */
+					*injectorMainControlRegisters[fuelChannel] |= injectorMainEnableMasks[fuelChannel];  // 启用输出比较动作
+					*injectorMainTimeRegisters[fuelChannel] = startTime;  // 设置比较时间
+					TIE |= injectorMainOnMasks[fuelChannel];  // 启用中断
+					TFLG = injectorMainOnMasks[fuelChannel];  // 清除中断标志
 				}else{
-					injectorMainStartTimesHolding[fuelChannel] = startTime;
-					selfSetTimer |= injectorMainOnMasks[fuelChannel]; // setup a bit to let the timer interrupt know to set its own new start from a var
+					// 定时器正在运行，设置保持值供下次使用
+					injectorMainStartTimesHolding[fuelChannel] = startTime;  // 保存开始时间到保持变量
+					selfSetTimer |= injectorMainOnMasks[fuelChannel]; // 设置一个位，让定时器中断知道从变量设置自己的新开始时间
 				}
 
 				// TODO advance/retard/dwell numbers all need range checking etc done. some of this should be done in the calculator section, and some here. currently none is done at all and for that reason, this will not work in a real system yet, if it works at all.
@@ -354,16 +369,18 @@ void PrimaryRPMISR(){
 				}*/
 			}
 		}
+		// 记录上升沿处理代码的运行时间
 		RuntimeVars.primaryInputLeadingRuntime = TCNT - codeStartTimeStamp;
 	}else{
+		// 下降沿：记录下降沿处理代码的运行时间
 		RuntimeVars.primaryInputTrailingRuntime = TCNT - codeStartTimeStamp;
 	}
 
-	Counters.primaryTeethSeen++;
-	// suss out rpm and accurate TDC reference
+	Counters.primaryTeethSeen++;  // 增加主齿计数
+	// 找出 RPM 和准确的 TDC 参考
 
-	// if you say it quick, it doesn't sound like much :
-	// schedule fuel and ign based on spark cut and fuel cut and timing vars and status vars config vars
+	// 如果你说得快，听起来不多：
+	// 基于火花切断、燃油切断、时序变量、状态变量和配置变量调度燃油和点火
 }
 
 
@@ -399,41 +416,45 @@ void SecondaryRPMISR(){
 	 * tooth shape, profile and spacing may vary this is the only reliable edge
 	 * for us to schedule from, hence the trailing edge code is very simple.
 	 */
+	// 如果是上升沿（BIT1 = 1）
 	if(PTITCurrentState & 0x02){
-// was this code like this because of a good reason?
-//		primaryPulsesPerSecondaryPulseBuffer = primaryPulsesPerSecondaryPulse;
-		primaryPulsesPerSecondaryPulse = 0;
+// 这段代码这样写是因为有好的理由吗？
+//		primaryPulsesPerSecondaryPulseBuffer = primaryPulsesPerSecondaryPulse;  // 已注释：缓冲主脉冲计数
+		primaryPulsesPerSecondaryPulse = 0;  // 重置主脉冲计数（每转重置一次）
 
-		// if we didn't get the right number of pulses drop sync and start over
+		// 如果我们没有得到正确数量的脉冲，丢弃同步并重新开始
+		// 注意：此时 primaryPulsesPerSecondaryPulse 已经是 0，所以这个检查可能有问题
 		if((primaryPulsesPerSecondaryPulse != 12) && (coreStatusA & PRIMARY_SYNC)){
-			coreStatusA &= CLEAR_PRIMARY_SYNC;
-			Counters.crankSyncLosses++;
+			coreStatusA &= CLEAR_PRIMARY_SYNC;  // 清除主同步标志
+			Counters.crankSyncLosses++;  // 增加曲轴同步丢失计数
 		}
 
-		LongTime timeStamp;
+		LongTime timeStamp;  // 32 位时间戳结构
 
-		/* Install the low word */
-		timeStamp.timeShorts[1] = edgeTimeStamp;
-		/* Find out what our timer value means and put it in the high word */
-		if(TFLGOF && !(edgeTimeStamp & 0x8000)){ /* see 10.3.5 paragraph 4 of 68hc11 ref manual for details */
-			timeStamp.timeShorts[0] = timerExtensionClock + 1;
+		/* 安装低字（16 位） */
+		timeStamp.timeShorts[1] = edgeTimeStamp;  // 低 16 位 = 边沿时间戳
+		/* 找出我们的定时器值的含义并将其放入高字（16 位） */
+		if(TFLGOF && !(edgeTimeStamp & 0x8000)){ /* 参见 68hc11 参考手册 10.3.5 第 4 段了解详细信息 */
+			// 如果定时器溢出且边沿时间戳的高位为 0
+			timeStamp.timeShorts[0] = timerExtensionClock + 1;  // 高 16 位 = 扩展时钟 + 1
 		}else{
-			timeStamp.timeShorts[0] = timerExtensionClock;
+			timeStamp.timeShorts[0] = timerExtensionClock;  // 高 16 位 = 扩展时钟
 		}
 
-		// get the data we actually want
-		engineCyclePeriod = 2 * (timeStamp.timeLong - lastSecondaryOddTimeStamp); // save the engine cycle period
-		lastSecondaryOddTimeStamp = timeStamp.timeLong; // save this stamp for next time round
+		// 获取我们实际想要的数据
+		engineCyclePeriod = 2 * (timeStamp.timeLong - lastSecondaryOddTimeStamp); // 保存发动机周期（24/2 模式：每转 2 个次脉冲）
+		lastSecondaryOddTimeStamp = timeStamp.timeLong; // 保存此时间戳供下次使用
 
-		// Because this is our only reference, each time we get this pulse, we know where we are at (simple mode so far)
-		coreStatusA |= PRIMARY_SYNC;
-		RuntimeVars.secondaryInputLeadingRuntime = TCNT - codeStartTimeStamp;
+		// 因为这是我们唯一的参考，每次我们收到这个脉冲，我们知道我们在哪里（到目前为止的简单模式）
+		coreStatusA |= PRIMARY_SYNC;  // 设置主同步标志（每转同步一次）
+		RuntimeVars.secondaryInputLeadingRuntime = TCNT - codeStartTimeStamp;  // 记录上升沿处理运行时间
 	}else{
+		// 下降沿：记录下降沿处理运行时间
 		RuntimeVars.secondaryInputTrailingRuntime = TCNT - codeStartTimeStamp;
 	}
 
-	Counters.secondaryTeethSeen++;
-	// suss out phase/engine cycle reference showing which bank we are on
+	Counters.secondaryTeethSeen++;  // 增加次齿计数
+	// 找出相位/发动机周期参考，显示我们在哪个气缸组
 
-	/* If the flag is not cleared at the beginning then the interrupt gets rescheduled while it is running, hence it can't be done at the end of the ISR */
+	/* 如果标志不在开始时清除，则中断在运行时会被重新调度，因此不能在 ISR 结束时完成 */
 }
