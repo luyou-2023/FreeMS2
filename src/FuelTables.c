@@ -43,31 +43,38 @@
 #include "inc/FreeMS2.h"
 
 
+/** @brief 主VE表（容积效率表）- Flash中的常量定义
+ *
+ * 此表格用于根据RPM和负荷（Load）查找容积效率（Volumetric Efficiency）。
+ * VE值表示发动机实际吸入的空气量相对于理论最大空气量的百分比。
+ * 用于SpeedDensity方法计算空气流量。
+ */
 const volatile mainTable VETableMainFlash FUELTABLESD = {
-	MAINTABLE_RPM_LENGTH,		/* VETableMain.RPMLength */
-	MAINTABLE_LOAD_LENGTH,		/* VETableMain.LoadLength */
-	/* VETableMain.RPM */
+	MAINTABLE_RPM_LENGTH,		/* VETableMain.RPMLength - RPM轴长度：RPM轴上的数据点数量（通常为24） */
+	MAINTABLE_LOAD_LENGTH,		/* VETableMain.LoadLength - 负荷轴长度：负荷轴上的数据点数量（通常为19） */
+	/* VETableMain.RPM - RPM轴值数组：定义RPM轴上的各个数据点（单位：RPM × 2，例如400表示200 RPM） */
 	{
-		   0,	 400,	1400,	2100,
-		2800,	3500,	4200,	4900,
-		5600,	6300,	7000,	7700,
-		8400,	9100,	9800,  10500,
-		11200,  11900,  12600,  13300,
-		14000,  14700,  14400,  16100,
-		16800,  17500,  18200
+		   0,	 400,	1400,	2100,  // 0, 200, 700, 1050 RPM
+		2800,	3500,	4200,	4900,  // 1400, 1750, 2100, 2450 RPM
+		5600,	6300,	7000,	7700,  // 2800, 3150, 3500, 3850 RPM
+		8400,	9100,	9800,  10500,  // 4200, 4550, 4900, 5250 RPM
+		11200,  11900,  12600,  13300,  // 5600, 5950, 6300, 6650 RPM
+		14000,  14700,  14400,  16100,  // 7000, 7350, 7200, 8050 RPM（注意：14400可能是错误，应为15400）
+		16800,  17500,  18200          // 8400, 8750, 9100 RPM
 	},
-	/* VETableMain.Load */
+	/* VETableMain.Load - 负荷轴值数组：定义负荷轴上的各个数据点（单位：Load × 100，例如1600表示16.00 Load） */
 	{
-		 1600,	 3200,	 4800,	 6400,
-		 8000,	 9600,	11200,	12800,
-		14400,	16000,	17600,	19200,
-		20800,	22400,	24000,	25600,
-		27200,	28800,	30400,	32000,
-		33600
+		 1600,	 3200,	 4800,	 6400,  // 16.00, 32.00, 48.00, 64.00 Load
+		 8000,	 9600,	11200,	12800,  // 80.00, 96.00, 112.00, 128.00 Load
+		14400,	16000,	17600,	19200,  // 144.00, 160.00, 176.00, 192.00 Load
+		20800,	22400,	24000,	25600,  // 208.00, 224.00, 240.00, 256.00 Load
+		27200,	28800,	30400,	32000,  // 272.00, 288.00, 304.00, 320.00 Load
+		33600                          // 336.00 Load
 	},
-	/* VETableMain.Table (Laid out to make sense for 24 RPM and 19 Load bins, 8 extras on end to make up size.) */
+	/* VETableMain.Table - VE值表格：二维数组，[Load][RPM]，值表示容积效率百分比（例如49152表示100%，32768表示50%） */
+	/* 布局：24个RPM点 × 19个Load点 = 456个值，加上8个额外值以匹配结构体大小 */
 	{
-		#include "data/tables/ve/flat80Percent.h"
+		#include "data/tables/ve/flat80Percent.h"  // 包含预定义的80%平坦VE表数据
 	}
 };
 
@@ -184,30 +191,36 @@ const volatile mainTable VETableTertiaryFlash FUELTABLESD = {
 };
 
 
+/** @brief Lambda表（目标空燃比表）- Flash中的常量定义
+ *
+ * 此表格用于根据RPM和负荷（Load）查找目标Lambda值（或目标空燃比）。
+ * Lambda值表示实际空燃比相对于理论空燃比的比值（1.0表示理论空燃比）。
+ * 用于计算目标燃油量。
+ */
 const volatile mainTable LambdaTableFlash FUELTABLESD = {
-	MAINTABLE_RPM_LENGTH,		/* LambdaTable.RPMLength */
-	MAINTABLE_LOAD_LENGTH,		/* LambdaTable.LoadLength */
-	/* LambdaTable.RPM */
+	MAINTABLE_RPM_LENGTH,		/* LambdaTable.RPMLength - RPM轴长度：RPM轴上的数据点数量 */
+	MAINTABLE_LOAD_LENGTH,		/* LambdaTable.LoadLength - 负荷轴长度：负荷轴上的数据点数量 */
+	/* LambdaTable.RPM - RPM轴值数组：定义RPM轴上的各个数据点（单位：RPM × 2） */
 	{
-		    0,	  200,	  700,	 1050,
-		 1400,	 1750,	 2100,	 2450,
-		 2800,	 3150,	 3500,	 3850,
-		 4200,	 4550,	 4900,	 5250,
-		 5600,	 5950,	 6300,	 6650,
-		 7000,	 7350,	 7700,	 8050,
-		 8400,	 8750,	 9100
+		    0,	  200,	  700,	 1050,  // 0, 100, 350, 525 RPM
+		 1400,	 1750,	 2100,	 2450,  // 700, 875, 1050, 1225 RPM
+		 2800,	 3150,	 3500,	 3850,  // 1400, 1575, 1750, 1925 RPM
+		 4200,	 4550,	 4900,	 5250,  // 2100, 2275, 2450, 2625 RPM
+		 5600,	 5950,	 6300,	 6650,  // 2800, 2975, 3150, 3325 RPM
+		 7000,	 7350,	 7700,	 8050,  // 3500, 3675, 3850, 4025 RPM
+		 8400,	 8750,	 9100          // 4200, 4375, 4550 RPM
 	},
-	/* LambdaTable.Load */
+	/* LambdaTable.Load - 负荷轴值数组：定义负荷轴上的各个数据点（单位：Load × 100） */
 	{
-		 1600,	 3200,	 4800,	 6400,
-		 8000,	 9600,	11200,	12800,
-		14400,	16000,	17600,	19200,
-		20800,	22400,	24000,	25600,
-		27200,	28800,	30400,	32000,
-		33600
+		 1600,	 3200,	 4800,	 6400,  // 16.00, 32.00, 48.00, 64.00 Load
+		 8000,	 9600,	11200,	12800,  // 80.00, 96.00, 112.00, 128.00 Load
+		14400,	16000,	17600,	19200,  // 144.00, 160.00, 176.00, 192.00 Load
+		20800,	22400,	24000,	25600,  // 208.00, 224.00, 240.00, 256.00 Load
+		27200,	28800,	30400,	32000,  // 272.00, 288.00, 304.00, 320.00 Load
+		33600                          // 336.00 Load
 	},
-	/* LambdaTable.Table */
+	/* LambdaTable.Table - Lambda值表格：二维数组，[Load][RPM]，值表示目标Lambda值（例如32768表示1.0，即理论空燃比） */
 	{
-		#include "data/tables/lambda/flatStoichiometric.h"
+		#include "data/tables/lambda/flatStoichiometric.h"  // 包含预定义的理论空燃比（Lambda=1.0）平坦表数据
 	}
 };

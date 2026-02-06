@@ -39,13 +39,19 @@
 #include "inc/FreeMS2.h"
 
 
-/** @brief Inlet Air Temperature Transfer Table
+/** @brief 进气温度（IAT）转换表
  *
- * Using this table it is possible to accurately and quickly convert
- * a raw ADC reading to a scaled temperature value in degrees Kelvin.
+ * 使用此表格可以快速准确地将原始ADC读数转换为开尔文温度值。
+ * 此表格用于NTC（负温度系数）热敏电阻的温度转换。
+ * 表格大小为1024，对应10位ADC的完整范围（0-1023）。
+ *
+ * @details 转换原理：
+ * - 热敏电阻的阻值随温度变化呈非线性关系
+ * - 通过查找表可以快速将ADC值映射到实际温度
+ * - 温度值以开尔文为单位存储（例如29315表示20°C = 293.15K）
  *
  * @author FreeTherm
  */
 const volatile unsigned short IATTransferTable[1024] LOOKUPD = {
-#include "data/thermistors/Bosch.h"
+#include "data/thermistors/Bosch.h"  // 包含Bosch热敏电阻的转换表数据（1024个值）
 };

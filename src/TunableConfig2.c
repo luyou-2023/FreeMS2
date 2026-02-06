@@ -46,14 +46,19 @@
 #include "inc/FreeMS2.h"
 
 
+/** @brief 可调配置2 - 小表格A（Flash中的常量定义）
+ *
+ * 此结构体包含第二组可调配置数据中的小表格A部分。
+ * 这些数据存储在Flash中，在运行时可以复制到RAM进行修改。
+ */
 const volatile SmallTables1 SmallTablesAFlash2 TUNETABLESD = {
-		{ARRAY_OF_16_VOLTAGES, ARRAY_OF_16_DWELLS},   	/* dwellDesiredVersusVoltageTable */
-		{ARRAY_OF_16_VOLTAGES, ARRAY_OF_16_DEADTIMES},	/* injectorDeadTimeTable */
-		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* postStartEnrichmentTable */
-		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* engineTempEnrichmentTableFixed */
-		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* primingVolumeTable */
-		{ARRAY_OF_16_ZEROS,  ARRAY_OF_16_ZEROS},      	/* engineTempEnrichmentTablePercent */
-		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_RPMS},       	/* dwellMaxVersusRPMTable */
+		{ARRAY_OF_16_VOLTAGES, ARRAY_OF_16_DWELLS},   	/* dwellDesiredVersusVoltageTable - 期望闭合角随电压变化表：根据电池电压查找期望的点火闭合角 */
+		{ARRAY_OF_16_VOLTAGES, ARRAY_OF_16_DEADTIMES},	/* injectorDeadTimeTable - 喷油器死区时间表：根据电池电压查找喷油器死区时间（开启延迟） */
+		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* postStartEnrichmentTable - 启动后加浓表：启动后根据时间或条件进行燃油加浓 */
+		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* engineTempEnrichmentTableFixed - 发动机温度加浓表（固定值）：根据发动机温度进行固定值加浓 */
+		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_ZEROS},       	/* primingVolumeTable - 预注油量表：冷启动时的预注油量 */
+		{ARRAY_OF_16_ZEROS,  ARRAY_OF_16_ZEROS},      	/* engineTempEnrichmentTablePercent - 发动机温度加浓表（百分比）：根据发动机温度进行百分比加浓 */
+		{ARRAY_OF_16_ZEROS, ARRAY_OF_16_RPMS},       	/* dwellMaxVersusRPMTable - 最大闭合角随RPM变化表：根据RPM查找最大允许的闭合角 */
 		{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -66,9 +71,13 @@ const volatile SmallTables1 SmallTablesAFlash2 TUNETABLESD = {
 };
 
 
+/** @brief 可调配置2 - 小表格B（Flash中的常量定义）
+ *
+ * 此结构体包含第二组可调配置数据中的小表格B部分。
+ */
 const volatile SmallTables2 SmallTablesBFlash2 TUNETABLESD = {
-		asyncDatalogBasic,
-		ARRAY_OF_6_FUEL_TRIMS,	/* perCylinderFuelTrims[] */
+		asyncDatalogBasic,  // datalogStreamType - 数据记录流类型：设置为基本异步数据记录模式
+		ARRAY_OF_6_FUEL_TRIMS,	/* perCylinderFuelTrims[] - 每缸燃油修正数组：为每个气缸提供独立的燃油修正百分比（6个气缸） */
 		{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,

@@ -39,10 +39,17 @@
 #include "inc/FreeMS2.h"
 
 
-/** @brief Mass Air Flow Transfer Table
+/** @brief 质量空气流量（MAF）转换表
  *
- * Using this table it is possible to accurately and quickly convert
- * a raw ADC reading to a measured mass air flow value.
+ * 使用此表格可以快速准确地将原始ADC读数转换为质量空气流量值。
+ * 此表格用于MAF传感器的线性化转换。
+ * 表格大小为1024，对应10位ADC的完整范围（0-1023）。
+ *
+ * @details 转换原理：
+ * - MAF传感器输出与空气流量呈非线性关系
+ * - 通过查找表可以快速将ADC值映射到实际空气流量
+ * - 流量值以特定单位存储（例如g/s或kg/h）
+ * - 此表格包含1024个预计算的转换值
  *
  * @author Fred Cooke
  */
