@@ -54,15 +54,29 @@
  * http://gcc.gnu.org/onlinedocs/gcc-3.3.6/Inline.html#Inline	*/
 
 
-/** @brief Send And Increment
+/** @brief 发送字节并递增指针
  *
- * Increment the pointer, decrement the length, and send it!
+ * 将字节写入串口数据寄存器启动发送，然后递增发送缓冲区指针并递减待发送长度。
+ * 这是串口发送 ISR 中的核心操作，用于逐个字节发送数据包。
+ * 
+ * @details 为什么需要这个方法：
+ * 串口发送是逐字节进行的，每次发送中断只能发送一个字节。此函数：
+ * 1. 将字节写入数据寄存器启动发送
+ * 2. 更新发送缓冲区指针（指向下一个要发送的字节）
+ * 3. 更新剩余长度（用于判断是否发送完成）
+ * 
+ * 内联函数的原因：
+ * - 在 ISR 中频繁调用，内联可以减少函数调用开销
+ * - 代码简单，内联不会显著增加代码大小
+ * - 提高实时性能
+ *
+ * @param rawValue 要发送的原始字节（0-255）
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @note This is an extern inline function and as such is always inlined.
- *
- * @param rawValue is the raw byte to be sent down the serial line.
+ * 
+ * @note 这是一个 extern inline 函数，总是被内联
  */
 extern inline void sendAndIncrement(unsigned char rawValue){
 	SCI0DRL = rawValue;  // 将字节写入 SCI0 数据寄存器，启动发送
@@ -71,15 +85,35 @@ extern inline void sendAndIncrement(unsigned char rawValue){
 }
 
 
-/** @brief Receive And Increment
+/** @brief 接收字节并递增指针
  *
- * Store the value and add it to the checksum, then increment the pointer and length.
+ * 将接收到的字节存储到接收缓冲区，累加到校验和中，然后递增接收缓冲区指针和长度。
+ * 这是串口接收 ISR 中的核心操作，用于逐个字节接收数据包。
+ * 
+ * @details 为什么需要这个方法：
+ * 串口接收是逐字节进行的，每次接收中断只能接收一个字节。此函数：
+ * 1. 将字节存储到接收缓冲区
+ * 2. 累加到校验和（用于后续验证数据完整性）
+ * 3. 更新接收缓冲区指针（指向下一个存储位置）
+ * 4. 更新已接收长度（用于判断是否接收完成）
+ * 
+ * 校验和计算：
+ * - 在接收过程中实时计算校验和
+ * - 接收完成后与数据包中的校验和比较
+ * - 如果不匹配，丢弃数据包
+ * 
+ * 内联函数的原因：
+ * - 在 ISR 中频繁调用，内联可以减少函数调用开销
+ * - 代码简单，内联不会显著增加代码大小
+ * - 提高实时性能
+ *
+ * @param value 要存储的字节数据（0-255），同时用于校验和计算
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @note This is an extern inline function and as such is always inlined.
- *
- * @param value is the byte of data to store in the buffer and add to the checksum.
+ * 
+ * @note 这是一个 extern inline 函数，总是被内联
  */
 extern inline void receiveAndIncrement(const unsigned char value){
 	*RXBufferCurrentPosition = value;  // 将接收到的字节存储到接收缓冲区
@@ -89,15 +123,39 @@ extern inline void receiveAndIncrement(const unsigned char value){
 }
 
 
-/** @brief Reset Receive State
+/** @brief 重置接收状态
  *
- * Reset communications reception to the state provided.
+ * 将通信接收状态重置为指定状态，用于错误恢复或开始新的数据包接收。
+ * 清除所有接收相关的变量和标志，使接收系统回到初始状态。
+ * 
+ * @details 为什么需要这个方法：
+ * 串口通信中可能发生各种错误：
+ * - 数据包损坏（校验和错误）
+ * - 数据包过长（超过缓冲区大小）
+ * - 通信错误（噪声、过载、帧错误、奇偶校验错误）
+ * - 同步丢失（接收到意外的起始字节）
+ * 
+ * 当发生错误时，必须重置接收状态：
+ * 1. 清除接收缓冲区指针和长度
+ * 2. 重置校验和
+ * 3. 清除状态标志
+ * 4. 禁用其他通信接口（如果正在使用缓冲区）
+ * 5. 重新启用接收（准备接收下一个数据包）
+ * 
+ * 如果不重置状态，系统可能：
+ * - 继续使用损坏的数据
+ * - 缓冲区溢出
+ * - 无法接收新数据包
+ *
+ * @param sourceIDState 要应用到 RX 缓冲区状态变量的状态
+ *                      - CLEAR_ALL_SOURCE_ID_FLAGS: 清除所有源 ID 标志
+ *                      - COM_SET_SCI0_INTERFACE_ID: 设置 SCI0 接口 ID
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @todo TODO this is in the wrong file!! Either move the header declaration or move the function!
- *
- * @param sourceIDState is the state to apply to the RX buffer state variable.
+ * 
+ * @todo TODO 此函数在错误的文件中！要么移动头文件声明，要么移动函数！
  */
 void resetReceiveState(unsigned char sourceIDState){
 	/* 将接收缓冲区指针设置到开始位置 */
@@ -135,17 +193,47 @@ void resetReceiveState(unsigned char sourceIDState){
 }
 
 
-/** @brief Serial Communication Interface 0 ISR
+/** @brief 串口通信接口 0 中断服务程序
  *
- * SCI0 ISR handles all interrupts for SCI0 by reading flags and acting
- * appropriately. Its functions are to send raw bytes out over the wire from a
- * buffer and to receive bytes from the wire un-escape them, checksum them and
- * store them in a buffer.
+ * SCI0 ISR 处理 SCI0 的所有中断，通过读取标志位并采取相应行动。
+ * 主要功能是从缓冲区发送原始字节，以及接收字节、转义处理、校验和计算并存储到缓冲区。
+ * 
+ * @details 为什么需要这个方法：
+ * 串口通信是异步的，必须使用中断驱动方式：
+ * - 接收：当数据到达时，硬件触发中断，ISR 立即读取数据
+ * - 发送：当发送寄存器空时，硬件触发中断，ISR 发送下一个字节
+ * 
+ * 如果使用轮询方式：
+ * - 会浪费大量 CPU 时间等待数据
+ * - 可能错过数据（接收缓冲区溢出）
+ * - 无法满足实时性要求
+ * 
+ * 接收处理：
+ * 1. 错误检测：噪声、过载、帧错误、奇偶校验错误
+ * 2. 起始字节检测：开始新数据包
+ * 3. 转义序列处理：处理特殊字节（ESCAPE_BYTE, START_BYTE, STOP_BYTE）
+ * 4. 停止字节检测：完成数据包接收
+ * 5. 校验和验证：验证数据完整性
+ * 6. 设置处理标志：通知主循环处理数据包
+ * 
+ * 发送处理：
+ * 1. 转义特殊字节：确保特殊字节不会破坏数据包格式
+ * 2. 逐个字节发送：每次中断发送一个字节
+ * 3. 发送完成检测：所有字节发送完成后发送停止字节
+ * 
+ * 转义机制：
+ * 数据包使用特殊字节（START_BYTE, STOP_BYTE, ESCAPE_BYTE）来标记边界。
+ * 如果数据中包含这些字节，需要进行转义：
+ * - ESCAPE_BYTE + ESCAPED_START_BYTE → START_BYTE
+ * - ESCAPE_BYTE + ESCAPED_STOP_BYTE → STOP_BYTE
+ * - ESCAPE_BYTE + ESCAPED_ESCAPE_BYTE → ESCAPE_BYTE
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @todo TODO Move this code into an include file much like the fuel interrupts such that it can be used for multiple UART SCI devices without duplication.
- * @todo TODO Remove the debug code that uses the IO ports to light LEDs during specific actions.
+ * 
+ * @todo TODO 将此代码移到包含文件中，类似于燃油中断，以便可以在多个 UART SCI 设备中使用而不重复
+ * @todo TODO 移除使用 IO 端口在特定操作期间点亮 LED 的调试代码
  */
 void SCI0ISR(){
 	/* 读取状态寄存器 */

@@ -42,12 +42,38 @@
 #include "inc/FreeMS2.h"
 
 
-unsigned short tachoPeriod = 65535;	/* Lowest RPM at start up time. */
+/** @brief 转速表周期（静态初始化）
+ *
+ * 转速表输出周期，初始化为最大值（65535），表示最低 RPM（发动机未运行）。
+ * 当发动机未运行时，转速表应显示最低值，避免显示错误的转速。
+ * 
+ * @details 为什么需要非零初始值：
+ * - 65535 表示最大周期 = 最低 RPM
+ * - 确保发动机未运行时转速表显示正确
+ * - 避免未初始化变量导致的随机值
+ */
+unsigned short tachoPeriod = 65535;	/* 启动时的最低 RPM */
 
-// Values for testing
-unsigned short masterPulseWidth = 10;
-unsigned short totalAngleAfterReferenceIgnition = 540;
-unsigned short totalAngleAfterReferenceInjection = 180;
+/** @brief 主脉宽（静态初始化，测试值）
+ *
+ * 主喷油脉宽，用于测试和调试。当前设置为 10（单位取决于系统配置）。
+ * 这是临时测试值，实际值应该从燃油计算函数中获取。
+ */
+unsigned short masterPulseWidth = 10;  // 测试值
+
+/** @brief 参考点火后的总角度（静态初始化，测试值）
+ *
+ * 从参考点（如 TDC）到点火事件的总角度，用于测试和调试。
+ * 当前设置为 540 度（1.5 圈），这是临时测试值。
+ */
+unsigned short totalAngleAfterReferenceIgnition = 540;  // 测试值
+
+/** @brief 参考喷油后的总角度（静态初始化，测试值）
+ *
+ * 从参考点（如 TDC）到喷油事件的总角度，用于测试和调试。
+ * 当前设置为 180 度（0.5 圈），这是临时测试值。
+ */
+unsigned short totalAngleAfterReferenceInjection = 180;  // 测试值
 
 	/* Setup the pointers to the registers for fueling use, this does NOT work if done in global.c, I still don't know why. */
 //	injectorMainTimeRegisters[0] = TC2_ADDR;
@@ -65,5 +91,17 @@ unsigned short totalAngleAfterReferenceInjection = 180;
 
 	// TODO perhaps read from the ds1302 once at start up and init the values or different ones with the actual time and date then update them in RTI
 
-/* Setup so that the tacho reads low when the engine isn't running */
+/** @brief 发动机循环周期（静态初始化）
+ *
+ * 发动机完整循环（720 度）的周期，以定时器计数为单位。
+ * 初始化为 1 RPM 对应的周期值（最大值），表示发动机未运行。
+ * 
+ * @details 为什么需要非零初始值：
+ * - ticksPerCycleAtOneRPM 是 1 RPM 对应的周期值（非常大的值）
+ * - 确保发动机未运行时周期值正确（表示最低 RPM）
+ * - 避免未初始化变量导致的随机值
+ * - 用于 RPM 计算：RPM = ticksPerCycleAtOneRPM / engineCyclePeriod
+ * 
+ * 设置使得当发动机未运行时转速表读取低值
+ */
 unsigned long engineCyclePeriod = ticksPerCycleAtOneRPM;

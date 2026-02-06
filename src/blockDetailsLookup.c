@@ -44,22 +44,46 @@
 #include "inc/blockDetailsLookup.h"
 
 
-/** @brief Lookup memory block details.
+/** @brief 查找内存块详情
  *
- * Flash only blocks leave the RAM address and page values
- * set to zero. ID's that don't exist leave all set to zero.
- * Error handling is to be done externally based on that.
+ * 根据逻辑位置 ID 查找内存块的详细信息，包括 Flash 地址、RAM 地址、页面、大小等。
+ * 此函数充当逻辑内存块的"地址簿"，将逻辑 ID 映射到物理地址。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 使用逻辑位置 ID 来标识不同的内存块（查找表、配置参数等），而不是直接使用物理地址。
+ * 这样做的好处：
+ * - 抽象化：调用者不需要知道内存块的物理位置
+ * - 灵活性：可以轻松移动内存块而不影响调用代码
+ * - 安全性：通过 ID 访问，避免直接操作地址
+ * - 通信协议：通过串口修改内存时使用逻辑 ID
+ * 
+ * 内存块类型：
+ * - Flash 专用块：RAM 地址和页面值设置为 0
+ * - RAM 块：Flash 地址和页面值设置为 0
+ * - 双缓冲块：同时有 Flash 和 RAM 地址
+ * 
+ * 错误处理：
+ * - 不存在的 ID：所有值都设置为 0
+ * - 外部调用者根据返回值判断是否成功
+ * - 如果 RAM 地址为 0，表示该块不在 RAM 中（可能是 Flash 专用）
+ * 
+ * 初始化：
+ * - 默认大小：MAINTABLE_SIZE（1024 字节）
+ * - 默认标志：block_is_in_flash | block_is_indexable
+ * - 如果块不在 Flash 中或不可索引，标志会被清除
+ * 
+ * @note 此函数是 switch 语句风格规则的例外，每个 case 语句不使用 {} 对。
+ *       在这种情况下，不使用 {} 可读性更好。
+ *
+ * @param locationID 需要详情的逻辑内存位置 ID（从 locationIDs.h 定义）
+ * @param details 指向 blockDetails 结构体的指针，用于填充详情
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         如果 locationID 不存在，所有字段都设置为 0
  *
  * @author Fred Cooke
- *
- * @note This function is an exception to the style rule switch statement
- * blocks of using a {} pair for each case statement. Readability is better
- * without them in this case.
- *
- * @param locationID is the ID of the memory location for which details are required.
- * @param details is a pointer to the blockDetails struct to populate with the details.
- *
- * @return An error code. Zero means success, anything else is a failure.
+ * 
+ * @note 当前整个函数被注释掉，待实现。函数逻辑已在注释中详细说明。
  */
 //unsigned short lookupBlockDetails(unsigned short locationID, blockDetails* details){
 //	/* Initialise the four values needed for operations on memory at 0 for error checking */

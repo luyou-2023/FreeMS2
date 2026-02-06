@@ -43,18 +43,33 @@
 #include "inc/decoderInterface.h"
 
 
-/** @brief Generate the core variables and average them.
+/** @brief 生成核心变量并计算平均值
  *
- * Each raw ADC value is converted to a usable measurement via a variety of
- * methods chosen at runtime by configured settings. Once in their native units
- * and therefore closer to maximal use of the available data range they are
- * all averaged.
+ * 将原始 ADC 值转换为可用的物理测量值，并根据配置选择不同的转换方法。
+ * 转换后的值使用其原生单位，充分利用可用数据范围，然后进行平均处理。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 从传感器读取的是原始 ADC 值（0-1023），需要转换为有意义的物理量：
+ * - 温度：ADC 值 → 摄氏度（通过查找表或线性缩放）
+ * - 压力：ADC 值 → kPa（通过查找表或线性缩放）
+ * - 电压：ADC 值 → 伏特（通过线性缩放）
+ * - 位置：ADC 值 → 百分比（通过线性缩放）
+ * 不同的传感器有不同的转换方法，需要根据配置选择。转换后的值用于后续的
+ * 燃油计算、点火计算等关键功能，因此必须准确可靠。
+ * 
+ * 当前实现：
+ * - 读取当前 ADC 数组（来自 ISR 的双缓冲）
+ * - 根据配置选择转换方法（查找表、线性缩放、固定值等）
+ * - 将转换后的值存储到 CoreVars 结构体
+ * - TODO: 实现平均值计算（当前是直接复制）
  *
- * @todo TODO incorporate averaging code, right now its a straight copy.
- * @todo TODO change the way configuration is done and make sure the most common options are after the first if().
- * @todo TODO add actual configuration options to the fixed config blocks for these items.
+ * @return 无返回值，转换后的值直接写入全局 CoreVars 结构体
  *
  * @author Fred Cooke
+ * 
+ * @todo TODO 实现平均值计算代码，当前是直接复制
+ * @todo TODO 改变配置方式，确保最常见的选项在第一个 if() 之后
+ * @todo TODO 在固定配置块中为这些项目添加实际配置选项
  */
 void generateCoreVars(){
 	/* 计算并获取我们将用于执行计算的基本变量 */

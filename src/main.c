@@ -42,21 +42,37 @@
 #include "inc/main.h"
 
 
-/** @brief The main function!
+/** @brief 主函数 - 应用程序的入口点和主循环
  *
- * The centre of the application is here. From here all non-ISR code is called
- * directly or indirectly. The two coarse blocks are init and the main loop.
- * Init is called first to set everything up and then the main loop is entered
- * where the flow of control continues until the device is switched off or
- * reset (excluding asynchronous ISR code). Currently the main loop only runs
- * the fuel, ignition and scheduling calculation code, and only when actually
- * required. The intention is to maintain a very low latency for calculations
- * such that the behaviour of the device more closely reflects the attached
- * engines rapidly changing requirements. When accessory code is added a new
- * scheduling algorithm will be required to keep the latency low without
- * starving any particular blocks of CPU time.
+ * 这是应用程序的中心，所有非 ISR 代码都从这里直接或间接调用。
+ * 函数分为两个主要部分：初始化和主循环。
+ * 
+ * @details 为什么需要这个方法：
+ * 嵌入式系统需要一个明确的入口点来启动应用程序。main() 函数负责：
+ * 1. 初始化：调用 init() 设置所有硬件和软件组件
+ * 2. 主循环：运行低优先级、非实时任务
+ * 
+ * 主循环的作用：
+ * - 执行燃油和点火计算（仅在需要时）
+ * - 处理通信数据包
+ * - 管理双缓冲机制（确保 ISR 和主循环之间的数据一致性）
+ * - 处理其他非实时任务
+ * 
+ * 设计原则：
+ * - 保持低延迟：计算只在需要时执行，确保系统能快速响应发动机需求
+ * - 非阻塞：主循环不执行长时间操作，避免影响实时性
+ * - 事件驱动：基于标志位决定何时执行计算，而不是固定周期
+ * 
+ * 与 ISR 的关系：
+ * - ISR 处理实时关键任务（发动机位置检测、喷油点火调度）
+ * - 主循环处理计算密集型任务（燃油计算、通信处理）
+ * - 通过双缓冲机制避免数据竞争
  *
+ * @return 理论上应返回退出代码，但实际上永远不会返回（无限循环）
+ * 
  * @author Fred Cooke
+ * 
+ * @todo TODO 考虑将此函数移到分页 Flash 中
  */
 int  main(){ // TODO maybe move this to paged flash ?
 	// 设置所有系统组件

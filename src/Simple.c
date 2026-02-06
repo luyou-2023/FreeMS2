@@ -51,20 +51,39 @@
 #include "inc/utils.h"
 
 
-/** Primary RPM ISR
+/** @brief 主 RPM 中断服务程序（简单解码器）
  *
- * Schedule events :
- * Blindly start fuel pulses for each and every input pulse.
- *
- * Sample ADCs :
- * Grab a unified set of ADC readings at one time in a consistent crank location to eliminate engine cycle dependent noise.
- * Set flag stating that New pulse, advance, etc should be calculated.
+ * 处理每缸一次的发动机位置信号，用于简单的发动机配置（如 B230F）。
+ * 对每个输入脉冲盲目地启动燃油脉冲，在一致的曲轴位置采样 ADC。
+ * 
+ * @details 为什么需要这个方法：
+ * 简单解码器用于支持每缸一次信号的发动机（如某些沃尔沃发动机）。
+ * 这种解码器：
+ * - 不需要同步信号（凸轮轴信号）
+ * - 不需要缺齿检测
+ * - 每个脉冲对应一个气缸
+ * - 适用于测试和演示，以及某些简单的发动机配置
+ * 
+ * 功能：
+ * 1. 事件调度：对每个输入脉冲盲目启动燃油脉冲
+ * 2. ADC 采样：在一致的曲轴位置采样所有 ADC 通道，消除发动机循环相关的噪声
+ * 3. RPM 计算：根据脉冲间隔计算发动机转速
+ * 4. 计算标志：设置标志指示需要计算新的脉宽、提前角等
+ * 
+ * 工作原理：
+ * - 检测上升沿（曲轴信号）
+ * - 计算连续脉冲之间的时间间隔
+ * - 根据时间间隔计算 RPM
+ * - 采样所有 ADC 通道
+ * - 调度喷油事件（如果脉宽足够）
+ * 
+ * @warning 这些代码仅用于测试和演示，目前不适合实际驾驶使用
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @warning These are for testing and demonstration only, not suitable for driving with just yet.
- *
- * @todo TODO make this code more general and robust such that it can be used for real simple applications
+ * 
+ * @todo TODO 使此代码更通用和健壮，以便可以用于真实的简单应用
  */
 void PrimaryRPMISR(){
 	/* 清除此输入捕获通道的中断标志 */
@@ -179,9 +198,26 @@ void PrimaryRPMISR(){
 }
 
 
-/** Secondary RPM ISR
+/** @brief 次 RPM 中断服务程序（简单解码器）
  *
- * Unused in this decoder.
+ * 在此解码器中未使用。简单解码器只需要主 RPM 输入（每缸一次信号），
+ * 不需要次 RPM 输入（凸轮轴信号）来区分发动机循环。
+ * 
+ * @details 为什么这个方法存在但未使用：
+ * 解码器接口要求实现 PrimaryRPMISR 和 SecondaryRPMISR 两个函数。
+ * 简单解码器不需要次 RPM 输入，因为：
+ * - 每缸一次信号已经提供了足够的信息
+ * - 不需要区分发动机循环（四冲程发动机的 720 度循环）
+ * - 可以盲目地对每个脉冲喷油
+ * 
+ * 此函数保留是为了：
+ * - 满足接口要求
+ * - 保持代码结构一致性
+ * - 未来可能的扩展
+ * 
+ * @return 无返回值
+ *
+ * @author Fred Cooke
  */
 void SecondaryRPMISR(){
 	/* 清除此输入捕获通道的中断标志 */

@@ -43,10 +43,38 @@
 #include "inc/commsISRs.h"
 
 
-/** @brief Real Time Interrupt Handler
+/** @brief 实时中断处理程序
  *
- * Handles time keeping, including all internal clocks, and generic periodic
- * tasks that run quickly and must be done on time.
+ * 处理时间管理，包括所有内部时钟，以及必须按时执行的通用周期性任务。
+ * RTI 以固定频率（128μs）触发，提供系统的时间基准。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 需要精确的时间管理来：
+ * 1. 维护系统时钟：毫秒、十分之一秒、秒、分钟计数器
+ * 2. 超时检测：ADC 读取超时、通信超时等
+ * 3. 周期性任务：防抖处理、LED 闪烁、数据记录触发等
+ * 
+ * RTI 频率：
+ * - RTI 周期：128μs（每 128 微秒触发一次）
+ * - 每 8 次 RTI = 1 毫秒（8 × 128μs = 1024μs ≈ 1ms）
+ * - 每 100 毫秒 = 1 十分之一秒
+ * - 每 10 十分之一秒 = 1 秒
+ * - 每 60 秒 = 1 分钟
+ * 
+ * 时间层次结构：
+ * - realTimeClockMain: 主计数器（每 128μs 递增）
+ * - realTimeClockMillis: 毫秒计数器（每 8 次 RTI 递增）
+ * - realTimeClockTenths: 十分之一秒计数器（每 100ms 递增）
+ * - realTimeClockSeconds: 秒计数器（每 1 秒递增）
+ * - realTimeClockMinutes: 分钟计数器（每 60 秒递增）
+ * 
+ * 周期性任务：
+ * - 每毫秒：ADC 读取超时检测
+ * - 每十分之一秒：端口防抖处理
+ * - 每秒：数据记录触发、LED 心跳
+ * - 每分钟：其他周期性维护任务
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
  */
@@ -149,11 +177,29 @@ void RTIISR(){
 }
 
 
-/** @brief ECT overflow handler
+/** @brief ECT 定时器溢出处理程序
  *
- * When the ECT free running timer hits 65535 and rolls over, this is run. Its
- * job is to extend the timer to an effective 32 bits for longer measuring much
- * longer periods with the same resolution.
+ * 当 ECT 自由运行定时器达到 65535 并溢出时调用此函数。
+ * 其作用是将定时器扩展到有效的 32 位，以便以相同的分辨率测量更长的周期。
+ * 
+ * @details 为什么需要这个方法：
+ * ECT 定时器是 16 位的，最大值为 65535。在高速发动机（如 10000 RPM）下，
+ * 曲轴脉冲间隔可能超过 16 位定时器的范围。通过溢出处理：
+ * 1. 扩展时间戳到 32 位：timerExtensionClock（高 16 位）+ TCNT（低 16 位）
+ * 2. 保持相同的分辨率（0.4μs）
+ * 3. 可以测量更长的周期（最大约 1717 秒）
+ * 
+ * 溢出检测：
+ * - 当 TCNT 从 65535 回绕到 0 时，TFLGOF 标志被设置
+ * - ISR 检测到此标志，递增 timerExtensionClock
+ * - 清除溢出标志
+ * 
+ * 32 位时间戳的使用：
+ * - 发动机周期计算：需要 32 位来存储高 RPM 下的周期值
+ * - 事件调度：需要 32 位来调度未来较远的事件
+ * - 时间差计算：需要处理溢出情况
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
  */

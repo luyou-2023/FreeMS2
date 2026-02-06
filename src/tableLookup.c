@@ -70,44 +70,50 @@ signed short lookup16Bit3dSS(
 signed char lookup8Bit3D( */
 
 
-/** @brief Main table read function
+/** @brief 从主表格中查找值（使用双线性插值）
  *
- * Looks up a value from a main table using interpolation.
+ * 在二维主表格（如 VE 表、点火提前角表）中查找指定 RPM 和 Load 对应的值。
+ * 使用双线性插值算法，如果查询点不在表格节点上，会在四个相邻节点之间插值。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 使用查找表存储发动机调参数据，例如：
+ * - VE 表（容积效率表）：根据 RPM 和 Load 查找 VE 值
+ * - 点火提前角表：根据 RPM 和 Load 查找点火提前角
+ * - Lambda 表：根据 RPM 和 Load 查找目标空燃比
+ * 由于表格是离散的（如 19x24），而实际运行参数是连续的，需要插值来获得
+ * 精确的值。双线性插值在四个相邻节点之间进行线性插值，提供平滑的过渡。
+ * 
+ * 插值过程：
+ * 1. 在 RPM 轴上找到包含 realRPM 的区间（lowRPM, highRPM）
+ * 2. 在 Load 轴上找到包含 realLoad 的区间（lowLoad, highLoad）
+ * 3. 获取四个角点的值：(lowRPM, lowLoad), (lowRPM, highLoad), (highRPM, lowLoad), (highRPM, highLoad)
+ * 4. 先在 Load 方向插值，得到两个值：lowRPMIntLoad, highRPMIntLoad
+ * 5. 再在 RPM 方向插值，得到最终值
+ * 
+ * 表格大小：
+ * 可以通过减少 RPMLength 和 LoadLength 来减小表格大小。
+ * 当前不支持增加轴的大小。
+ * 
+ * 表格外部的值：
+ * 如果查询点在表格外部，会返回最接近的边界值或角点值。
+ * 这是合理的行为，避免返回无效值。
+ * 
+ * @warning 此函数依赖于轴值是从低到高排序的列表。如果不是这种情况，
+ * 行为未定义，可能包括内存损坏和发动机损坏。
+ * 
+ * @warning 这些例程依赖于没有 ISR 尝试访问 RAM 窗口中的小表格和其他实时设置。
+ * 如果有，将偶尔从大表格的随机部分读取错误值，导致不可预测且非常难找的 bug！
  *
- * The process :
- *
- * Take a table with two movable axis sets and two axis lengths,
- * loop to find which pairs of axis values and indexs we are between,
- * interpolate two pairs down to two values,
- * interpolate two values down to one value.
- *
- * Table size :
- *
- * To reduce the table size from 19x24 to something smaller, simply
- * reduce the RPMLength and LoadLength fields to lower values.
- * Increasing the size of either axis is not currently possible.
- *
- * Values outside the table :
- *
- * Given that the axis lists are in order, a data point outside
- * the table will give the value adjacent to it, and one outside
- * one of the four corners will give the corner value. This is a
- * clean and reasonable behaviour in my opinion.
- *
- * Reminder : X/RPM is horizontal, Y/Load is vertical
- *
- * @warning This function relies on the axis values being a sorted
- * list from low to high. If this is not the case behaviour is
- * undefined and could include memory corruption and engine damage.
+ * @param Table 指向要读取的表格的指针（mainTable 结构体）
+ * @param realRPM 当前 RPM 值，用于查找表格值（无符号短整型）
+ * @param realLoad 当前 Load 值（如 MAP 或 TPS），用于查找表格值（无符号短整型）
+ * @param RAMPage 存储表格的 RAM 页面（当前未使用，表格应在当前可见页面）
+ * 
+ * @return 指定位置的双线性插值结果（无符号短整型）
+ * 
+ * @note X/RPM 是水平方向，Y/Load 是垂直方向
  *
  * @author Fred Cooke
- *
- * @param Table is a pointer to the table to read from.
- * @param realRPM is the current RPM for which a table value is required.
- * @param realLoad is the current load for which a table value is required.
- * @param RAMPage is the RAM page that the table is stored in.
- *
- * @return The interpolated value for the location specified.
  */
 unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short realRPM, unsigned short realLoad, unsigned char RAMPage){
 
@@ -195,16 +201,32 @@ unsigned short lookupPagedMainTableCellValue(mainTable* Table, unsigned short re
 }
 
 
-/** @brief Two D table read function
+/** @brief 从二维表格中查找值（使用线性插值）
  *
- * Looks up a value from a two D table using interpolation.
+ * 在一维查找表中查找指定输入值对应的输出值，使用线性插值算法。
+ * 用于查找单输入单输出的映射关系，如喷油器死区时间表、温度修正表等。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 使用一维查找表存储各种修正和映射关系，例如：
+ * - 喷油器死区时间表：根据电池电压查找死区时间
+ * - 发动机温度修正表：根据冷却液温度查找修正百分比
+ * - 温度传感器转换表：将 ADC 值转换为实际温度
+ * 由于表格是离散的（16 个点），而输入值是连续的，需要插值来获得精确的值。
+ * 线性插值在两个相邻节点之间进行线性插值，提供平滑的过渡。
+ * 
+ * 插值过程：
+ * 1. 在轴数组中找到包含 Value 的区间（lowAxisValue, highAxisValue）
+ * 2. 获取对应的查找值（lowLookupValue, highLookupValue）
+ * 3. 如果精确匹配，直接返回对应值
+ * 4. 否则进行线性插值：lowLookupValue + (比例 * 差值)
+ *
+ * @param Table 指向要读取的表格的指针（twoDTableUS 结构体，固定 16 个点）
+ * @param Value 输入值，用于查找对应的输出值（无符号短整型）
+ * 
+ * @return 指定位置的线性插值结果（无符号短整型）
+ *         如果输入值在表格外部，返回最接近的边界值
  *
  * @author Fred Cooke
- *
- * @param Table is a pointer to the table to read from.
- * @param Value is the position value used to lookup the return value.
- *
- * @return the interpolated value for the position specified
  */
 unsigned short lookupTwoDTableUS(twoDTableUS * Table, unsigned short Value){
 
@@ -243,20 +265,29 @@ unsigned short lookupTwoDTableUS(twoDTableUS * Table, unsigned short Value){
 }
 
 
-/** @brief Set an axis value
+/** @brief 设置表格轴的值
  *
- * Sets the value of an axis cell in a table. This is used when configuring
- * a table via a communication interface.
+ * 设置表格中轴单元格的值，用于通过通信接口配置表格。
+ * 在设置值之前会验证索引有效性和轴值顺序（必须递增）。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 的调参需要通过通信接口（如串口）修改查找表。在修改轴值时必须：
+ * - 验证索引在有效范围内
+ * - 确保轴值保持递增顺序（查找和插值算法依赖于此）
+ * 如果轴值顺序被打乱，查找函数可能返回错误值，导致发动机运行异常。
+ * 此函数提供安全的轴值修改接口，确保数据完整性。
+ *
+ * @param index 要调整的轴单元格位置（0 到 length-1）
+ * @param value 要设置的轴单元格值（无符号短整型）
+ * @param axis 指向要调整的轴数组的指针
+ * @param length 轴数组的长度
+ * @param errorBase 错误代码的基础值，用于添加错误代码偏移
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - errorBase + invalidAxisIndex: 索引超出范围
+ *         - errorBase + invalidAxisOrder: 轴值顺序无效（不是递增的）
  *
  * @author Fred Cooke
- *
- * @param index The position of the axis cell to adjust.
- * @param value The value to set the axis cell to.
- * @param axis A pointer to the axis array to adjust.
- * @param length The length of the axis array.
- * @param errorBase The base value to add error code offsets to.
- *
- * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short setAxisValue(unsigned short index, unsigned short value, unsigned short axis[], unsigned short length, unsigned short errorBase){
 	// 检查索引是否超出范围
@@ -284,20 +315,27 @@ unsigned short setAxisValue(unsigned short index, unsigned short value, unsigned
 }
 
 
-/** @brief Set a main table cell value
+/** @brief 设置主表格单元格的值
  *
- * Sets the value of a cell in a main table. This is used when configuring a
- * table via a communication interface.
+ * 设置主表格（二维表格）中指定单元格的值，用于通过通信接口配置表格。
+ * 在设置值之前会验证索引有效性。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 调参时需要修改主表格（如 VE 表、点火提前角表）中的单个单元格。
+ * 通过通信接口可以实时修改表格值，无需重新烧录固件。此函数提供安全的
+ * 单元格修改接口，确保索引在有效范围内，防止内存越界。
+ *
+ * @param RPageValue 表格所在的 RAM 页面（当前未使用）
+ * @param Table 指向要调整的表格的指针（mainTable 结构体）
+ * @param RPMIndex 要调整的单元格的 RPM 位置（0 到 RPMLength-1）
+ * @param LoadIndex 要调整的单元格的 Load 位置（0 到 LoadLength-1）
+ * @param cellValue 要设置的单元格值（无符号短整型）
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - invalidMainTableRPMIndex: RPM 索引超出范围
+ *         - invalidMainTableLoadIndex: Load 索引超出范围
  *
  * @author Fred Cooke
- *
- * @param RPageValue The page of RAM that the table is in.
- * @param Table A pointer to the table to adjust.
- * @param RPMIndex The RPM position of the cell to adjust.
- * @param LoadIndex The load position of the cell to adjust.
- * @param cellValue The value to set the cell to.
- *
- * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short setPagedMainTableCellValue(unsigned char RPageValue, mainTable* Table, unsigned short RPMIndex, unsigned short LoadIndex, unsigned short cellValue){
 //	unsigned char oldRPage = RPAGE;  // 已注释：保存旧页面

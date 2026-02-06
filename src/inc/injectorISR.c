@@ -26,31 +26,37 @@
 
 /**	@file injectorISR.c
  *
- * @brief Injector ISR shared code
+ * @brief 喷油器 ISR 共享代码
  *
- * This code is identical between all 6 channels, and thus we only want one
- * copy of it. The X in each macro will be replaced with the number that is
- * appropriate for the channel it is being used for at the time.
+ * 此代码在所有 6 个通道之间完全相同，因此我们只需要一份副本。
+ * 每个宏中的 X 将被替换为适合当前使用通道的编号。
+ * 
+ * @details 为什么需要这个方法：
+ * 喷油器控制是 ECU 最关键的实时任务之一，必须在精确的曲轴角度开启和关闭。
+ * 使用输出比较功能在硬件级别实现精确的时序控制，确保：
+ * - 喷油脉宽精确（微秒级精度）
+ * - 喷油时序准确（相对于曲轴角度）
+ * - 低延迟（硬件触发，无需软件轮询）
+ * 
+ * 每个通道执行以下操作：
  *
- * Each channel performs the following actions
- *
- * - 1	Clear its interrupt flag
- * - 2	Record its start time
- * - 3	Measure and record its latency
- * - 4	Check to see if its just turned on
- *   - 4.1	Copy the channels pulse width to a local variable
- *   - 4.2	Determine the minimum pulse width based on code run time const and latency
- *   - 4.3	Clamp used pulsewidth inside min and max
- *   - 4.4	If used pulse width is larger than the current period of the engines cycle flag as always on
- *   - 4.5	Set the action to turn off
- *   - 4.6	Increment the time by pulse width
- *   - 4.7	If staging required, either, switch them on and sched to turn off, or sched to turn on
- * - 5	Else it has just turned off
- *   - 5.1	If staged channel is still on, turn it off
- *   - 5.2	If(self schedule flagged) schedule the next start
- *   - 5.3	Else disable itself
- * - 6	Calculate and record code run time
- * - 7	Return
+ * - 1	清除中断标志
+ * - 2	记录开始时间
+ * - 3	测量并记录延迟
+ * - 4	检查是否刚刚开启
+ *   - 4.1	将通道的脉宽复制到局部变量
+ *   - 4.2	根据代码运行时间常量和延迟确定最小脉宽
+ *   - 4.3	将使用的脉宽限制在最小和最大值之间
+ *   - 4.4	如果使用的脉宽大于当前发动机周期的周期，标记为始终开启
+ *   - 4.5	设置关闭动作
+ *   - 4.6	将时间增加脉宽
+ *   - 4.7	如果需要分级，要么立即开启并调度关闭，要么调度开启
+ * - 5	否则它刚刚关闭
+ *   - 5.1	如果分级通道仍然开启，现在关闭它
+ *   - 5.2	如果（自调度标志设置）调度下次开始
+ *   - 5.3	否则禁用自身
+ * - 6	计算并记录代码运行时间
+ * - 7	返回
  *
  * @author Fred Cooke
  */

@@ -225,13 +225,39 @@
 //}
 
 
-/** @brief Decode a packet and respond
+/** @brief 解码数据包并响应
  *
- * This is the core function that controls which functionality is run when a
- * packet is received in full by the ISR code and control is passed back to the
- * main loop code. The vast majority of communications action happens here.
+ * 这是通信系统的核心函数，当 ISR 代码完整接收数据包并将控制权传回主循环时，
+ * 此函数决定执行哪些功能。绝大多数通信操作都在这里处理。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 需要通过串口与外部设备（调参软件、数据记录器等）通信。通信协议使用
+ * 数据包格式，包含：
+ * - 起始字节、头部标志、载荷 ID、长度字段、数据、校验和、停止字节
+ * 
+ * 当前实现：
+ * 这是一个简化的回显实现，将接收到的数据包原样返回。完整的实现应该：
+ * 1. 解析数据包头部（标志、载荷 ID、长度等）
+ * 2. 验证数据包完整性（校验和、长度检查）
+ * 3. 根据载荷 ID 执行相应操作：
+ *    - 请求版本信息
+ *    - 读取/写入查找表
+ *    - 读取/写入配置参数
+ *    - 数据记录
+ *    - 系统复位
+ * 4. 构建响应数据包
+ * 5. 发送响应
+ * 
+ * 设计考虑：
+ * - 在主循环中执行，避免在 ISR 中执行复杂操作
+ * - 使用双缓冲机制，ISR 接收数据，主循环处理数据
+ * - 错误处理：无效数据包、校验和错误、长度错误等
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
+ * 
+ * @note 当前实现是简化的回显版本，完整的数据包处理逻辑在注释中
  */
 void decodePacketAndRespond(){
 	// 当前实现：简单回显接收到的数据包

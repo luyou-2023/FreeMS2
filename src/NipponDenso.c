@@ -58,29 +58,49 @@
 #include "inc/utils.h"
 
 
-/** Primary RPM ISR
+/** @brief 主 RPM 中断服务程序（日本电装 24/2 解码器）
  *
- * Summary of intended engine position capture scheme (out of date as at 3/1/09)
- *
- * Position/RPM signal interpretation :
- * Discard edges that have arrived too soon (lose sync here?)
- * Check to ensure we haven't lost sync (pulse arrives too late)
- * Compare time stamps of successive edges and calculate RPM
- * Store RPM and position in globals
- *
- * Schedule events :
- * loop through all events (spark and fuel), schedule those that fall sufficiently after this tooth and before the next one we expect.
- *
- * Sample ADCs :
- * Grab a unified set of ADC readings at one time in a consistent crank location to eliminate engine cycle dependent noise.
- * Set flag stating that New pulse, advance, etc should be calculated.
+ * 处理日本电装 24/2 传感器信号，用于丰田等发动机。主输入有 24 个均匀分布的齿，
+ * 用于检测曲轴位置和计算 RPM。每两个主脉冲对应一个气缸，支持半顺序喷油和浪费火花点火。
+ * 
+ * @details 为什么需要这个方法：
+ * 日本电装 24/2 传感器是许多丰田发动机使用的标准传感器：
+ * - 主输入：24 个均匀分布的齿（每 15 度一个齿）
+ * - 次输入：2 个相邻的齿（用于区分发动机循环）
+ * - 提供足够的信息用于浪费火花点火和半顺序燃油喷射
+ * 
+ * 支持的发动机：
+ * - 4A-GE, 7A-FE, 3S-GE, 1UZ-FE, Mazda F2T 等
+ * 
+ * 功能：
+ * 1. 位置/RPM 信号解释：
+ *    - 丢弃过早到达的边沿（可能失去同步）
+ *    - 检查是否失去同步（脉冲到达太晚）
+ *    - 比较连续边沿的时间戳并计算 RPM
+ *    - 将 RPM 和位置存储到全局变量
+ * 
+ * 2. 事件调度：
+ *    - 遍历所有事件（火花和燃油）
+ *    - 调度那些在此齿之后且在下个预期齿之前的事件
+ * 
+ * 3. ADC 采样：
+ *    - 在一致的曲轴位置一次性获取统一的 ADC 读数集
+ *    - 消除发动机循环相关的噪声
+ *    - 设置标志指示需要计算新的脉宽、提前角等
+ * 
+ * 同步检测：
+ * - 每转应该有 12 个主脉冲（24 个齿 / 2）
+ * - 如果 primaryPulsesPerSecondaryPulse > 12，失去同步
+ * - 失去同步时清除同步标志并重置计数器
+ * 
+ * @warning 这些代码仅用于测试和演示，目前不适合实际驾驶使用
+ * 
+ * @return 无返回值
  *
  * @author Fred Cooke
- *
- * @warning These are for testing and demonstration only, not suitable for driving with just yet.
- *
- * @todo TODO bring the above docs up to date with reality
- * @todo TODO finish this off to a usable standard
+ * 
+ * @todo TODO 更新上述文档以反映实际情况
+ * @todo TODO 完成此代码到可用标准
  */
 void PrimaryRPMISR(){
 	/* Clear the interrupt flag for this input compare channel */
@@ -384,12 +404,35 @@ void PrimaryRPMISR(){
 }
 
 
-/** Secondary RPM ISR
+/** @brief 次 RPM 中断服务程序（日本电装 24/2 解码器）
  *
- * Similar to the primary one.
+ * 处理次 RPM 输入（2 个相邻齿），用于区分发动机循环和确定相位。
+ * 每次收到次 RPM 脉冲时，重置主脉冲计数器并确认同步。
+ * 
+ * @details 为什么需要这个方法：
+ * 24/2 传感器中的"2"表示次输入有 2 个相邻齿，用于：
+ * - 区分两个 360 度循环（四冲程发动机的 720 度循环）
+ * - 确定发动机相位（哪个气缸处于压缩冲程）
+ * - 重置主脉冲计数器（每转重置一次）
+ * - 计算发动机周期（用于 RPM 计算）
+ * 
+ * 工作原理：
+ * - 检测次 RPM 输入的上升沿
+ * - 重置 primaryPulsesPerSecondaryPulse = 0（每转重置）
+ * - 验证主脉冲计数是否正确（应该是 12 个）
+ * - 计算发动机周期（2 × 次脉冲间隔）
+ * - 设置同步标志（PRIMARY_SYNC）
+ * 
+ * 同步验证：
+ * - 如果主脉冲计数不是 12，且已同步，则失去同步
+ * - 失去同步时清除同步标志并增加错误计数
+ * 
+ * @return 无返回值
  *
- * @todo TODO bring this documentation up to date.
- * @todo TODO finish this off to a usable standard.
+ * @author Fred Cooke
+ * 
+ * @todo TODO 更新此文档
+ * @todo TODO 完成此代码到可用标准
  */
 void SecondaryRPMISR(){
 	/* Clear the interrupt flag for this input compare channel */

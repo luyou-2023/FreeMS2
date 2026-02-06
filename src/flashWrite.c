@@ -46,21 +46,41 @@
 #include <string.h>
 
 
-/** @brief Erases a sector of flash memory
+/** @brief 擦除 Flash 内存的一个扇区
  *
- * This will erase a 1k sector in flash.  Write 0xFFFF to the starting sector
- * to be erased, 0xFFFF will be written regardless. Register the flash sector
- * erase command(0x40) and call StackBurner();. If you try to erase a protected
- * sector you will get PVIOL in the FSTAT register.
+ * 擦除 Flash 中的一个 1KB 扇区。在要擦除的起始扇区写入 0xFFFF（无论写入什么值，
+ * 擦除后都是 0xFFFF），注册 Flash 扇区擦除命令（0x40）并调用 StackBurner()。
+ * 如果尝试擦除受保护的扇区，FSTAT 寄存器中会出现 PVIOL 错误。
+ * 
+ * @details 为什么需要这个方法：
+ * Flash 写入前必须先擦除（Flash 只能从 1 变为 0，不能从 0 变为 1）。
+ * 擦除操作以扇区为单位（1KB），用于：
+ * - 实时调参：修改查找表前需要擦除对应扇区
+ * - 固件更新：更新固件前需要擦除 Flash 区域
+ * - 配置修改：修改配置参数前需要擦除
+ * 
+ * 擦除过程：
+ * 1. 验证地址对齐：地址必须是扇区大小的倍数
+ * 2. 切换到目标 Flash 页面
+ * 3. 清除错误标志（PVIOL、ACCERR）
+ * 4. 写入虚拟数据到扇区起始地址（触发擦除）
+ * 5. 设置擦除命令（SECTOR_ERASE）
+ * 6. 调用 StackBurner() 执行擦除（汇编函数，处理页面切换）
+ * 
+ * @warning 这将擦除从 flashAddr 开始的整个 1KB 块，该扇区内的所有数据都将丢失
+ * 
+ * @param PPage Flash 页面，扇区所在的页面
+ * @param flashAddr 扇区的起始地址（必须是扇区对齐的）
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - addressNotSectorAligned: 地址不是扇区对齐的
+ *         - PVIOL: 保护违反错误（尝试擦除受保护扇区）
+ *         - ACCERR: 访问错误
  *
  * @author Sean Keys
- *
- * @warning This will erase an entire 1k block starting at flashAddr
- *
- * @param PPage the flash page the sector is in
- * @param flashAddr the start address of the sector
- *
- * @return An error code. Zero means success, anything else is a failure.
+ * 
+ * @todo TODO 添加对 accerr 和 pviol 错误位的返回
+ * @todo TODO 验证擦除是否成功，这是必要的还是由硬件处理？
  */
 unsigned short eraseSector(unsigned char PPage, unsigned short *flashAddr){
 
@@ -81,31 +101,49 @@ unsigned short eraseSector(unsigned char PPage, unsigned short *flashAddr){
 }
 
 
-/** @brief Writes a block of memory to flash
+/** @brief 将内存块写入 Flash
  *
- * The block size must either be under 1024, or an exact multiple of 1024.
- * Additionally, if under 1024 the destination should be within a single flash
- * sector, and if a multiple of 1024, the destination should be sector aligned.
- *
- * Because the RAM version will be in an arbitrary place we need to base
- * our positioning from the flash location. Firstly we need to ensure that
- * it doesn't cross any sector boundaries. Then we need to find the address
- * of the sector to be burned to. We also need to determine if there are
- * 2 or 3 chunks of memory to be copied to the buffer, three cases exist
- * for that :
- *
- * | From Flash |  From RAM  | From flash |
- * |    From Flash    |     From RAM      |
- * |     From RAM     |    From Flash     |
- *
- * @warning Limited to 63k per write! (obviously)
+ * 将 RAM 中的数据块写入 Flash 内存。块大小必须小于 1024 字节，或者是 1024 的精确倍数。
+ * 如果小于 1024，目标地址应在单个 Flash 扇区内；如果是 1024 的倍数，目标地址应扇区对齐。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 需要将修改后的数据（查找表、配置参数）从 RAM 写入 Flash 以持久保存。
+ * Flash 写入的特殊要求：
+ * - 必须先擦除再写入（Flash 只能从 1 变为 0）
+ * - 写入以扇区为单位（1KB）
+ * - 如果只修改扇区的一部分，需要先读取整个扇区，修改后再写回
+ * 
+ * 写入策略：
+ * 由于 RAM 版本可能在任意位置，我们需要基于 Flash 位置进行定位。
+ * 首先确保数据不跨越扇区边界，然后找到要烧录的扇区地址。
+ * 还需要确定是否有 2 或 3 个内存块需要复制到缓冲区，存在三种情况：
+ * 
+ * 情况 1：| 来自 Flash | 来自 RAM | 来自 Flash |
+ *         （需要保留扇区前后的数据）
+ * 
+ * 情况 2：| 来自 Flash | 来自 RAM |
+ *         （需要保留扇区前的数据）
+ * 
+ * 情况 3：| 来自 RAM | 来自 Flash |
+ *         （需要保留扇区后的数据）
+ * 
+ * 写入过程：
+ * 1. 验证块大小和地址对齐
+ * 2. 如果需要，擦除目标扇区
+ * 3. 将需要保留的 Flash 数据复制到缓冲区
+ * 4. 将 RAM 数据复制到缓冲区的正确位置
+ * 5. 将整个缓冲区写入 Flash 扇区
+ * 
+ * @warning 每次写入限制为 63KB（显然）
+ * 
+ * @param details 包含要读取的 RAM 地址和页面、要烧录到的 Flash 地址和页面、要读取的大小
+ * @param buffer 指向至少 1024 字节长的 RAM 块的指针，用于允许独立烧录小块数据
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - sizeOfBlockToBurnIsZero: 要烧录的块大小为 0
+ *         - 其他错误代码（地址对齐、扇区边界等）
  *
  * @author Fred Cooke
- *
- * @param details contains the RAM address and page to be read from, the flash address and page to be burned to and the size to be read.
- * @param buffer is a pointer to a block of RAM at least 1024 bytes long used to allow small chunks to be burned independently.
- *
- * @return An error code. Zero means success, anything else is a failure.
  */
 unsigned short writeBlock(blockDetails* details, void* buffer){
 	unsigned char sectors;
@@ -188,23 +226,38 @@ unsigned short writeBlock(blockDetails* details, void* buffer){
 }
 
 
-/** @brief Writes a sector from memory to a sector in flash
+/** @brief 将内存扇区写入 Flash 扇区
  *
- * Uses writeWord to write a 1k block from sourceAddress(RAM) to
- * flashDestinationAddress, one word at a time. Give it the starting memory
- * address and the destination flash address. Both addresses will be
- * incremented by 1 word after a successful writeWord, until the whole 1024
- * byte sector has been written.  Before any writing occurs eraseSector is
- * called to make sure the destination is blank.
+ * 使用 writeWord 将一个 1KB 块从源地址（RAM）逐字写入 Flash 目标地址。
+ * 提供起始内存地址和目标 Flash 地址，每次成功写入一个字后，两个地址都会递增 1 个字，
+ * 直到整个 1024 字节扇区写入完成。在写入之前，调用 eraseSector 确保目标区域为空。
+ * 
+ * @details 为什么需要这个方法：
+ * Flash 写入必须以扇区为单位，且必须先擦除再写入。此函数：
+ * 1. 验证目标地址是扇区对齐的
+ * 2. 验证目标地址在 Flash 区域内（不在 RAM 或寄存器区域）
+ * 3. 擦除目标扇区（确保可以写入）
+ * 4. 逐字写入整个扇区（512 个字 = 1024 字节）
+ * 
+ * 写入过程：
+ * - 切换到目标 Flash 页面
+ * - 循环 512 次，每次写入一个字（2 字节）
+ * - 使用 writeWord() 执行实际的 Flash 写入操作
+ * - 递增源地址和目标地址
+ * 
+ * @param RPage RAM 页面，RAMSourceAddress 所在的页面
+ * @param RAMSourceAddress 源数据的地址（RAM 中）
+ * @param PPage Flash 页面，flashDestinationAddress 所在的页面
+ * @param flashDestinationAddress Flash 中要写入数据的目标地址（必须是扇区对齐的）
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - addressNotSectorAligned: 地址不是扇区对齐的
+ *         - addressNotFlashRegion: 地址不在 Flash 区域内
+ *         - writeWord() 返回的错误代码
  *
  * @author Sean Keys
- *
- * @param RPage the page of RAM the RAMSourceAddress is located
- * @param RAMSourceAddress the address of the source data
- * @param PPage the page of flash where your flashDestinationAddress is located
- * @param flashDestinationAddress where your data will be written to in flash
- *
- * @return an error code. Zero means success, anything else is a failure.
+ * 
+ * @todo TODO 决定是否需要禁用中断，因为我们在手动设置 Flash/RAM 页面
  */
 unsigned short writeSector(unsigned char RPage, unsigned short* RAMSourceAddress, unsigned char PPage , unsigned short* flashDestinationAddress){
 
@@ -249,22 +302,46 @@ unsigned short writeSector(unsigned char RPage, unsigned short* RAMSourceAddress
 }
 
 
-/**	@brief Program Command
+/** @brief Flash 编程命令 - 写入一个字到 Flash
  *
- * This will write 1 word to an empty(0xFFFF) flash address. If you try to
- * write to an address containing data(not 0xFFFF),an error will register at
- * FSTAT. The embedded algorithm works like this, just write to the desired
- * flash address as you would any other writable address. Then register the
- * program command(0x20) at FCDM, the rest is handled by StackBurner();
+ * 将一个 16 位字写入空的（0xFFFF）Flash 地址。如果尝试写入包含数据（不是 0xFFFF）的地址，
+ * FSTAT 寄存器中会记录错误。嵌入式算法的工作原理是：像写入任何其他可写地址一样写入所需的
+ * Flash 地址，然后在 FCMD 寄存器中注册编程命令（0x20），其余由 StackBurner() 处理。
+ * 
+ * @details 为什么需要这个方法：
+ * Flash 写入是底层操作，必须以字（16 位）为单位进行。此函数：
+ * 1. 验证地址是字对齐的（地址必须是偶数）
+ * 2. 清除错误标志（PVIOL、ACCERR）
+ * 3. 将数据写入 Flash 地址（触发写入序列）
+ * 4. 设置编程命令（PROGRAM）
+ * 5. 调用 StackBurner() 执行实际的 Flash 写入（汇编函数，处理页面切换和时序）
+ * 
+ * Flash 写入要求：
+ * - 目标地址必须是 0xFFFF（已擦除状态）
+ * - 地址必须是字对齐的（偶数地址）
+ * - 地址不能受保护（否则会触发 PVIOL 错误）
+ * - 必须在正确的 Flash 页面中
+ * 
+ * 写入过程：
+ * 1. 验证地址对齐
+ * 2. 切换到目标 Flash 页面
+ * 3. 清除错误标志
+ * 4. 写入数据到 Flash 地址（这会触发写入序列）
+ * 5. 设置编程命令
+ * 6. 调用 StackBurner() 执行写入
+ * 7. 恢复原始页面
+ * 
+ * @warning 确保目标地址不受保护，否则会在 FSTAT 中标记错误
+ * 
+ * @param flashDestination 要写入数据的目标 Flash 地址（必须是字对齐的）
+ * @param data 要写入的数据（16 位无符号整数）
+ * 
+ * @return 错误代码：0 表示成功，非零表示失败
+ *         - addressNotWordAligned: 地址不是字对齐的
+ *         - PVIOL: 保护违反错误（尝试写入受保护地址）
+ *         - ACCERR: 访问错误（目标地址不是 0xFFFF）
  *
  * @author Sean Keys
- *
- * @warning Be sure your destination address is not protected or you will flag an error in FSTAT
- *
- * @param flashDestination where you want to write your data
- * @param data the data you are going to write
- *
- * @return an error code. Zero means success, anything else is a failure.
  */
 unsigned short writeWord(unsigned short* flashDestination, unsigned short data){
 	if((unsigned short)flashDestination & 0x0001){

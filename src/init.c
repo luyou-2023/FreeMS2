@@ -81,10 +81,35 @@ void init(){
 //#define NO_INIT
 
 
-/** @brief Set the PLL clock frequency
+/** @brief 设置 PLL 时钟频率
  *
- * Set the Phase Locked Loop to our desired frequency (80MHz) and switch to
- * using it for clock (40MHz bus speed).
+ * 配置锁相环（PLL）到目标频率（80MHz 系统时钟，40MHz 总线速度），
+ * 并切换到使用 PLL 作为系统时钟源。
+ * 
+ * @details 为什么需要这个方法：
+ * MC9S12XDP512 微控制器默认使用外部晶振（如 16MHz），但通过 PLL 可以
+ * 倍频到更高的系统时钟频率，提高 CPU 性能。对于实时性要求高的 ECU 应用，
+ * 更高的时钟频率意味着：
+ * - 更快的计算速度（燃油计算、点火计算）
+ * - 更精确的定时（喷油脉宽、点火提前角）
+ * - 更快的响应时间（传感器采样、通信处理）
+ * 
+ * PLL 配置过程：
+ * 1. 切换到外部时钟源（确保 PLL 未在使用）
+ * 2. 关闭 PLL（准备重新配置）
+ * 3. 设置参考分频器（REFDV）：将晶振频率分频
+ * 4. 设置倍频器（SYNR）：将分频后的频率倍频
+ * 5. 打开 PLL 并等待锁定
+ * 6. 切换到 PLL 时钟源
+ * 
+ * 计算公式：
+ * - PLL 频率 = 2 * (晶振频率 / (REFDV + 1)) * (SYNR + 1)
+ * - 总线频率 = PLL 频率 / 2
+ * - 示例：16MHz / (3+1) * (9+1) * 2 = 80MHz（系统时钟），40MHz（总线）
+ * 
+ * @warning 必须在其他模块初始化之前调用，因为所有模块都依赖正确的时钟频率
+ *
+ * @return 无返回值
  *
  * @author Fred Cooke
  */
@@ -116,7 +141,41 @@ void initPLL(){
 }
 
 
-/* Configure all the I/O to default values to keep power use down etc */
+/** @brief 初始化所有 I/O 引脚和模块
+ *
+ * 配置所有 I/O 引脚为默认安全状态，初始化所有外设模块（ADC、PWM、定时器等），
+ * 以降低功耗并确保系统处于已知的安全状态。
+ * 
+ * @details 为什么需要这个方法：
+ * 微控制器复位后，I/O 引脚和模块的状态是不确定的。如果不正确初始化：
+ * - 引脚可能处于高阻态，导致意外电流消耗
+ * - 模块可能处于未知状态，导致意外行为
+ * - ADC 通道可能被配置为数字输入，浪费宝贵的模拟输入资源
+ * 
+ * 初始化内容：
+ * 1. ADC 模块（ATD0）：
+ *    - 配置为模拟输入模式（8 个通道）
+ *    - 设置采样时间和转换时钟
+ *    - 启用自动扫描模式
+ * 2. PWM 模块：
+ *    - 配置 PWM 通道和时钟源
+ *    - 设置周期和占空比
+ * 3. 定时器模块：
+ *    - 配置输入捕获和输出比较功能
+ * 4. 串口模块（SCI）：
+ *    - 配置波特率和数据格式
+ * 5. Flash 模块：
+ *    - 配置 Flash 写入功能
+ * 
+ * @note 当前实现是硬编码的，未来应该从 Flash 配置中读取，以便灵活配置
+ * 
+ * @return 无返回值
+ *
+ * @author Fred Cooke
+ * 
+ * @todo TODO 使配置依赖于 Flash 配置，而不是硬编码
+ * @todo TODO 设置所有模块并关闭未使用的模块（CAN、SCI、SPI、I2C 等）
+ */
 void initIO(){
 	/* for now, hard code all stuff to be outputs as per Freescale documentation,	*/
 	/* later what to do will be pulled from flash configuration such that all		*/
@@ -401,16 +460,22 @@ void initTunableAddresses(){
 //}
 
 
-/** @brief Buffer addresses of paged data
+/** @brief 保存分页数据的缓冲区地址
  *
- * Save the paged memory addresses to variables such that we can access them
- * from another paged block with no warnings.
+ * 将分页内存地址保存到变量中，以便从另一个分页块访问它们而不产生警告。
+ * 通过调用与它们要访问的数据位于同一页面的函数来避免编译器警告。
+ * 
+ * @details 为什么需要这个方法：
+ * MC9S12XDP512 使用分页内存管理，Flash 和 RAM 被分成多个页面。
+ * 如果从错误的页面访问分页数据，编译器会产生警告。通过在同一页面中
+ * 的函数来获取地址，可以避免这些警告，同时保持代码的可移植性。
+ * 
+ * 此函数初始化所有查找表、主表格、小表格和填充区域的地址指针，
+ * 这些指针用于后续的表格查找和数据访问。
+ * 
+ * @note 非常感谢 Jean Bélanger 提供这个想法的灵感！
  *
- * If you try to access paged data from the wrong place you get nasty warnings.
- * These calls to functions that live in the same page that they are addressing
- * prevent those warnings.
- *
- * @note Many thanks to Jean Bélanger for the inspiration/idea to do this!
+ * @return 无返回值，地址直接保存到全局指针变量
  *
  * @author Fred Cooke
  */
@@ -531,7 +596,36 @@ void initFlash(){
 	FSTAT = FSTAT | (PVIOL | ACCERR);
 }
 
-/* Set up the timer module and its various interrupts */
+/** @brief 初始化 ECT 定时器模块
+ *
+ * 设置增强型捕获定时器（ECT）模块，用于发动机位置检测、RPM 计算和事件调度。
+ * 这是 ECU 实时控制的核心，必须精确配置以确保准确的喷油和点火时序。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 需要精确的定时功能来：
+ * 1. 检测发动机位置：通过输入捕获功能检测曲轴和凸轮轴信号
+ * 2. 计算 RPM：测量脉冲间隔计算发动机转速
+ * 3. 调度事件：使用输出比较功能在精确的曲轴角度触发喷油和点火
+ * 
+ * 定时器配置：
+ * - 定时器频率：40MHz / 16 = 2.5MHz，每个计数 = 0.4μs
+ * - 输入捕获：通道 0（主 RPM 输入）、通道 5（次 RPM 输入）
+ * - 输出比较：通道 2-7（喷油器控制）
+ * - 溢出中断：用于扩展 32 位时间戳
+ * 
+ * 初始化内容：
+ * 1. 配置中断使能（TIE）：启用输入捕获中断
+ * 2. 清除所有标志（TFLG, TFLGOF）：确保干净的初始状态
+ * 3. 使能定时器（TSCR1）：启动定时器运行
+ * 4. 配置预分频器和溢出中断（TSCR2）
+ * 5. 配置输入捕获和输出比较模式（TIOS, TCTL1-4）
+ * 
+ * @return 无返回值
+ *
+ * @author Fred Cooke
+ * 
+ * @todo TODO 重新安排这些内容的顺序，并将使能和中断使能提取到 init 的最后一个函数调用中
+ */
 void initECTTimer(){
 
 	// TODO 重新安排这些东西的顺序，并将使能和中断使能提取到 init 的最后一个函数调用中
@@ -591,6 +685,28 @@ void initECTTimer(){
 
 
 /* Setup the sci module(s) that we need to use. */
+/** @brief 初始化串口通信模块（SCI0）
+ *
+ * 配置串口通信接口（SCI0），用于与调参软件、数据记录器等外部设备通信。
+ * 设置波特率、数据格式、中断等参数，使 ECU 能够接收命令和发送数据。
+ * 
+ * @details 为什么需要这个方法：
+ * ECU 需要通过串口与外部设备通信，用于：
+ * - 实时调参：修改查找表、配置参数
+ * - 数据记录：发送传感器数据、运行状态
+ * - 诊断：读取错误代码、系统状态
+ * - 固件更新：接收新的固件数据
+ * 
+ * 串口配置：
+ * - 波特率：从配置中读取，通常为 115200 或 9600
+ * - 数据格式：9 位数据（8 位数据 + 1 位奇偶校验）
+ * - 奇偶校验：奇校验（用于错误检测）
+ * - 中断：接收和发送中断使能
+ * 
+ * @return 无返回值
+ *
+ * @author Fred Cooke
+ */
 void initSCIStuff(){
 	/* 替代寄存器集选择器默认为零 */
 
@@ -688,7 +804,33 @@ void initConfiguration(){
 }
 
 
-/* Set up all the remaining interrupts */
+/** @brief 设置所有剩余的中断
+ *
+ * 配置和启用所有中断，包括实时中断（RTI）和低电压中断（LVI）。
+ * 这是初始化的最后一步，确保所有硬件和软件组件已正确配置后才启用中断。
+ * 
+ * @details 为什么需要这个方法：
+ * 中断系统是 ECU 实时响应的关键：
+ * 1. 实时中断（RTI）：提供系统时钟，用于时间管理、超时检测等
+ * 2. 低电压中断（LVI）：检测电源电压异常，保护系统
+ * 3. 其他中断：已在各自的初始化函数中配置（定时器、串口等）
+ * 
+ * 为什么最后启用中断：
+ * - 确保所有硬件模块已正确初始化
+ * - 避免初始化过程中的意外中断
+ * - 确保中断服务程序访问的数据结构已就绪
+ * 
+ * RTI 配置：
+ * - RTI 周期：128μs（用于系统时钟）
+ * - 每 8 次 RTI = 1 毫秒
+ * - 用于维护毫秒、十分之一秒、秒、分钟计数器
+ * 
+ * @return 无返回值
+ *
+ * @author Fred Cooke
+ * 
+ * @todo TODO 以有组织的方式将中断配置移到配置内部
+ */
 void initInterrupts(){
 	/* 设置实时中断 */
 	// RTICTL: 0x10 = 0b00010000
